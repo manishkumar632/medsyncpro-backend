@@ -24,8 +24,12 @@ public class GlobalExceptionHandler {
             String errorMessage = error.getDefaultMessage();
             errors.put(fieldName, errorMessage);
         });
+        
+        // If single validation error, use that message as main message
+        String message = errors.size() == 1 ? errors.values().iterator().next() : "Validation failed";
+        
         return ResponseEntity.badRequest()
-                .body(ApiResponse.error("Validation failed", errors));
+                .body(ApiResponse.error(message, errors));
     }
     
     @ExceptionHandler(BusinessException.class)
