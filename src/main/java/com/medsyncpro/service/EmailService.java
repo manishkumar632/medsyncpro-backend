@@ -1,37 +1,54 @@
 package com.medsyncpro.service;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.List;
+import java.util.Map;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class EmailService {
-    private final JavaMailSender mailSender;
     
-    @Value("${app.frontend.url:http://localhost:3000}")
+    @Value("${brevo.api.key}")
+    private String brevoApiKey;
+    
+    @Value("${app.frontend.url:https://manishkumar632.github.io/online-medication}")
     private String frontendUrl;
     
-    @Value("${spring.mail.username}")
+    @Value("${brevo.from.email}")
     private String fromEmail;
+    
+    @Value("${brevo.from.name:MedSyncPro}")
+    private String fromName;
     
     @Async
     public void sendVerificationEmail(String email, String token) {
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromEmail);
-            message.setTo(email);
-            message.setSubject("Verify Your Email - MedSyncPro");
-            message.setText("Click the link to verify your email:\n\n" + 
-                        frontendUrl + "/verify-email?token=" + token + 
-                        "\n\nThis link will expire in 24 hours.");
+            RestTemplate restTemplate = new RestTemplate();
             
-            mailSender.send(message);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("api-key", brevoApiKey);
+            
+            Map<String, Object> body = Map.of(
+                "sender", Map.of("name", fromName, "email", fromEmail),
+                "to", List.of(Map.of("email", email)),
+                "subject", "Verify Your Email - MedSyncPro",
+                "htmlContent", "<p>Click the link to verify your email:</p>" +
+                              "<p><a href='" + frontendUrl + "/verify-email?token=" + token + "'>Verify Email</a></p>" +
+                              "<p>This link will expire in 24 hours.</p>"
+            );
+            
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            restTemplate.postForEntity("https://api.brevo.com/v3/smtp/email", request, String.class);
+            
             log.info("Verification email sent to: {}", email);
         } catch (Exception e) {
             log.error("Failed to send verification email to: {}", email, e);
