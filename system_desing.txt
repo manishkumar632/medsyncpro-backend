@@ -1,0 +1,78 @@
+1. High level data flow (registration verification):
+Client → Register API
+        → Create user (PENDING)
+        → Generate verification token
+        → Store token
+        → Send email
+User clicks link / enters code
+        → Verify API
+        → Validate token
+        → Activate user
+
+2. System design components:
+PENDING → ACTIVE
+
+3. Verification service:
+- generate token / OTP
+- save token
+- expiry handling
+- attempts tracking
+
+4. Edge cases:
+- User registers twice same email
+- User registers but never verifies
+- User verifies after long time
+- User deleted but token exists
+- User already verified
+
+5. Must handle idempotency.
+6. Token related edge cases:
+- Token expired
+- Token already used
+- Token invalid
+- Multiple tokens exist
+- Race condition (double verify click)
+
+7. Security edge cases:
+- Email enumeration attack
+- Brute force OTP attempts
+- Token leakage
+- Replay attack
+- User trying to verify another email
+
+8. Email delivery edge cases:
+- Email failed to send
+- Email delayed
+- User clicks old email
+- Spam folder
+
+9. Concurrency edge cases:
+- User clicks verify multiple times
+- Resend while old token exists
+- Verify while resend generating new token
+
+10. Business edge cases:
+- Verification required before login
+- Partial registration
+- Social login + email verification conflict
+- Admin created user
+
+
+--Recommended flow--
+Register:
+1. Check email exists
+2. Create user PENDING
+3. Invalidate old tokens
+4. Generate token
+5. Store token (expiry)
+6. Send email async
+
+Verify
+1. Find token
+2. Validate:
+  - exists
+  - not used
+  - not expired
+3. Activate user
+4. Mark token used
+5. Delete other tokens

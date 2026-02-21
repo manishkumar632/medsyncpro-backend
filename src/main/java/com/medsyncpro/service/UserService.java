@@ -21,6 +21,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final VerificationService verificationService;
     
     @Value("${admin.secret:}")
     private String adminSecret;
@@ -64,11 +65,16 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(request.getRole());
         
-        // Doctor and Pharmacist require approval
-        user.setApproved(request.getRole() == Role.PATIENT);
+        // All users start as not approved until email verified
+        user.setApproved(false);
         
         try {
-            return userRepository.save(user);
+            user = userRepository.save(user);
+            
+            // Generate and send verification token
+            verificationService.generateAndSendToken(user);
+            
+            return user;
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException("DUPLICATE_ENTRY", "Email or username already exists");
         }
@@ -81,11 +87,22 @@ public class UserService {
             throw new BadCredentialsException("Invalid credentials");
         }
         
+        if (!user.getEmailVerified()) {
+            throw new BusinessException("EMAIL_NOT_VERIFIED", "Please verify your email before logging in");
+        }
+        
         if (!user.getApproved()) {
             throw new BusinessException("ACCOUNT_PENDING", "Account pending approval");
         }
         
-        String token = jwtService.generateToken(user);
-        return new com.medsyncpro.dto.LoginResponse(token, user.getEmail(), user.getName(), user.getRole());
+        return new com.medsyncpro.dto.LoginResponse(user.getEmail(), user.getName(), user.getRole());
+    }
+    
+    public String generateToken(User user) {
+        return jwtService.generateToken(user);
+    }
+    
+    public User getUserByEmail(String email) {
+        return userRepository.findByEmail(email);
     }
 }
