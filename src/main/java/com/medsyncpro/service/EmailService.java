@@ -42,8 +42,8 @@ public class EmailService {
                 "to", List.of(Map.of("email", email)),
                 "subject", "Verify Your Email - MedSyncPro",
                 "htmlContent", "<p>Click the link to verify your email:</p>" +
-                              "<p><a href='" + frontendUrl + "/verify-email?token=" + token + "'>Verify Email</a></p>" +
-                              "<p>This link will expire in 24 hours.</p>"
+                            "<p><a href='" + frontendUrl + "verify-email?token=" + token + "'>Verify Email</a></p>" +
+                            "<p>This link will expire in 24 hours.</p>"
             );
             
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
