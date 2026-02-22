@@ -19,13 +19,13 @@ public class EmailService {
     @Value("${brevo.api.key}")
     private String brevoApiKey;
     
-    @Value("${app.frontend.url:https://manishkumar632.github.io/online-medication}")
+    @Value("${app.frontend.url}")
     private String frontendUrl;
     
     @Value("${brevo.from.email}")
     private String fromEmail;
     
-    @Value("${brevo.from.name:MedSyncPro}")
+    @Value("${brevo.from.name}")
     private String fromName;
     
     @Async

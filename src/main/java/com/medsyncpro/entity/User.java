@@ -2,6 +2,7 @@ package com.medsyncpro.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -38,6 +39,20 @@ public class User {
     
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
+    
+    private LocalDateTime updatedAt;
+    
+    private String phone;
+    
+    private LocalDate dob;
+    
+    @Column(length = 500)
+    private String address;
+    
+    @Enumerated(EnumType.STRING)
+    private Gender gender;
+    
+    private String profileImageUrl;
     
     @Version
     private Long version;

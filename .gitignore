@@ -32,3 +32,4 @@ build/
 ### VS Code ###
 .vscode/
 note.txt
+application-dev.properties
