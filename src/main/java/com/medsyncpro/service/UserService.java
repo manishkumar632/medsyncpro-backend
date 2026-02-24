@@ -95,7 +95,7 @@ public class UserService {
             throw new BusinessException("ACCOUNT_PENDING", "Account pending approval");
         }
         
-        return new com.medsyncpro.dto.LoginResponse(user.getEmail(), user.getName(), user.getRole());
+        return new com.medsyncpro.dto.LoginResponse(user.getId(), user.getEmail(), user.getName(), user.getRole());
     }
     
     public String generateToken(User user) {
