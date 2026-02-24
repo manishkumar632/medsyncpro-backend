@@ -15,8 +15,8 @@ public class Document {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+    @Column(name = "user_id", nullable = false, length = 36)
+    private String userId;
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

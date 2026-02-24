@@ -12,7 +12,7 @@ public interface VerificationTokenRepository extends JpaRepository<VerificationT
     
     @Modifying
     @Query("DELETE FROM VerificationToken vt WHERE vt.user.id = ?1")
-    void deleteByUserId(Long userId);
+    void deleteByUserId(String userId);
     
     @Query("SELECT COUNT(vt) FROM VerificationToken vt WHERE vt.user.email = ?1 AND vt.createdAt > ?2")
     long countRecentTokensByEmail(String email, LocalDateTime since);

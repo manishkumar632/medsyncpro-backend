@@ -44,13 +44,13 @@ public class CloudinaryStorageService implements FileStorageService {
     }
     
     @Override
-    public String uploadProfileImage(MultipartFile file, Long userId) {
+    public String uploadProfileImage(MultipartFile file, String userId) {
         validateFile(file, ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE);
         return uploadToCloudinary(file, "medsyncpro/profiles/" + userId);
     }
     
     @Override
-    public String uploadDocument(MultipartFile file, Long userId) {
+    public String uploadDocument(MultipartFile file, String userId) {
         validateFile(file, ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_SIZE);
         return uploadToCloudinary(file, "medsyncpro/documents/" + userId);
     }

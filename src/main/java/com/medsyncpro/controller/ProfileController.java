@@ -27,7 +27,7 @@ public class ProfileController {
     
     @GetMapping("/profile")
     public ResponseEntity<ApiResponse<ProfileResponse>> getProfile(Authentication authentication) {
-        Long userId = getUserIdFromAuth(authentication);
+        String userId = getUserIdFromAuth(authentication);
         ProfileResponse profile = profileService.getProfile(userId);
         return ResponseEntity.ok(ApiResponse.success(profile, "Profile retrieved successfully"));
     }
@@ -40,7 +40,7 @@ public class ProfileController {
             @RequestPart(value = "documents", required = false) List<MultipartFile> documents,
             @RequestParam(required = false) Map<String, String> documentTypes) {
         
-        Long userId = getUserIdFromAuth(authentication);
+        String userId = getUserIdFromAuth(authentication);
         
         ProfileResponse updatedProfile = profileService.updateProfile(
                 userId,
@@ -53,7 +53,7 @@ public class ProfileController {
         return ResponseEntity.ok(ApiResponse.success(updatedProfile, "Profile updated successfully"));
     }
     
-    private Long getUserIdFromAuth(Authentication authentication) {
+    private String getUserIdFromAuth(Authentication authentication) {
         if (authentication == null || authentication.getPrincipal() == null) {
             throw new BusinessException("UNAUTHORIZED", "User not authenticated");
         }

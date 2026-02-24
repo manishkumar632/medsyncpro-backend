@@ -36,7 +36,7 @@ public class ProfileService {
     
     @Transactional
     public ProfileResponse updateProfile(
-            Long userId,
+            String userId,
             String profileJson,
             MultipartFile profileImage,
             List<MultipartFile> documents,
@@ -94,7 +94,7 @@ public class ProfileService {
     }
     
     @Transactional(readOnly = true)
-    public ProfileResponse getProfile(Long userId) {
+    public ProfileResponse getProfile(String userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         

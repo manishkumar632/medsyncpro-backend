@@ -14,7 +14,7 @@ public interface FileStorageService {
      * @param userId User identifier for organizing files
      * @return Public URL of uploaded file
      */
-    String uploadProfileImage(MultipartFile file, Long userId);
+    String uploadProfileImage(MultipartFile file, String userId);
     
     /**
      * Upload document and return URL
@@ -22,7 +22,7 @@ public interface FileStorageService {
      * @param userId User identifier for organizing files
      * @return Public URL of uploaded file
      */
-    String uploadDocument(MultipartFile file, Long userId);
+    String uploadDocument(MultipartFile file, String userId);
     
     /**
      * Delete file from storage
