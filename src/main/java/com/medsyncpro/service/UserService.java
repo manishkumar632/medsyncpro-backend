@@ -99,10 +99,16 @@ public class UserService {
     }
     
     public String generateToken(User user) {
-        return jwtService.generateToken(user);
+        return jwtService.generateAccessToken(user, "unknown");
     }
     
     public User getUserByEmail(String email) {
         return userRepository.findByEmail(email);
+    }
+    
+    @Transactional
+    public void incrementTokenVersion(User user) {
+        user.setTokenVersion(user.getTokenVersion() + 1);
+        userRepository.save(user);
     }
 }

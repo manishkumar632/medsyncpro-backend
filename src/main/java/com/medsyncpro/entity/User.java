@@ -61,6 +61,9 @@ public class User {
     private Gender gender;
     
     private String profileImageUrl;
+
+    @Column(nullable = false)
+    private Integer tokenVersion = 0;
     
     @Version
     private Long version;
