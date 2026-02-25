@@ -1,5 +1,6 @@
 package com.medsyncpro.controller;
 
+import com.medsyncpro.dto.LoginResponse;
 import com.medsyncpro.dto.ProfileResponse;
 import com.medsyncpro.entity.User;
 import com.medsyncpro.exception.BusinessException;
@@ -25,9 +26,23 @@ public class ProfileController {
     private final ProfileService profileService;
     private final UserRepository userRepository;
     
+    
+    /**
+     * Lightweight session validation endpoint.
+     * Returns basic user info for the currently authenticated user.
+     * All security checks (expired token, blacklisted, deleted user, token version)
+     * are handled by JwtAuthenticationFilter before this endpoint is reached.
+     */
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<LoginResponse>> getCurrentUser(Authentication authentication) {
+        User user = getUserFromAuth(authentication);
+        LoginResponse response = new LoginResponse(user.getId(), user.getEmail(), user.getName(), user.getRole());
+        return ResponseEntity.ok(ApiResponse.success(response, "Session valid"));
+    }
+    
     @GetMapping("/profile")
     public ResponseEntity<ApiResponse<ProfileResponse>> getProfile(Authentication authentication) {
-        String userId = getUserIdFromAuth(authentication);
+        String userId = getUserFromAuth(authentication).getId();
         ProfileResponse profile = profileService.getProfile(userId);
         return ResponseEntity.ok(ApiResponse.success(profile, "Profile retrieved successfully"));
     }
@@ -40,7 +55,7 @@ public class ProfileController {
             @RequestPart(value = "documents", required = false) List<MultipartFile> documents,
             @RequestParam(required = false) Map<String, String> documentTypes) {
         
-        String userId = getUserIdFromAuth(authentication);
+        String userId = getUserFromAuth(authentication).getId();
         
         ProfileResponse updatedProfile = profileService.updateProfile(
                 userId,
@@ -53,7 +68,7 @@ public class ProfileController {
         return ResponseEntity.ok(ApiResponse.success(updatedProfile, "Profile updated successfully"));
     }
     
-    private String getUserIdFromAuth(Authentication authentication) {
+    private User getUserFromAuth(Authentication authentication) {
         if (authentication == null || authentication.getPrincipal() == null) {
             throw new BusinessException("UNAUTHORIZED", "User not authenticated");
         }
@@ -65,6 +80,6 @@ public class ProfileController {
             throw new BusinessException("USER_NOT_FOUND", "User not found");
         }
         
-        return user.getId();
+        return user;
     }
 }
