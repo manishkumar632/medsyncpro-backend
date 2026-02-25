@@ -2,10 +2,14 @@ package com.medsyncpro.repository;
 
 import com.medsyncpro.entity.Role;
 import com.medsyncpro.entity.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface UserRepository extends JpaRepository<User, String> {
     boolean existsByEmail(String email);
@@ -21,4 +25,25 @@ public interface UserRepository extends JpaRepository<User, String> {
     
     @Query("SELECT COUNT(u) FROM User u WHERE u.emailVerified = true AND u.approved = false AND u.deleted = false AND u.role <> com.medsyncpro.entity.Role.ADMIN")
     long countPendingApprovals();
+    
+    // ── Admin user listing queries ──
+    
+    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.role = :role")
+    Page<User> findByRoleAndDeletedFalse(@Param("role") Role role, Pageable pageable);
+    
+    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.role = :role " +
+           "AND (LOWER(u.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<User> findByRoleAndSearch(@Param("role") Role role, @Param("search") String search, Pageable pageable);
+    
+    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.role = :role AND u.approved = :approved")
+    Page<User> findByRoleAndApproved(@Param("role") Role role, @Param("approved") Boolean approved, Pageable pageable);
+    
+    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.role = :role AND u.approved = :approved " +
+           "AND (LOWER(u.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<User> findByRoleAndApprovedAndSearch(@Param("role") Role role, @Param("approved") Boolean approved, @Param("search") String search, Pageable pageable);
+    
+    // Pending approvals list (email verified but not approved, non-admin)
+    @Query("SELECT u FROM User u WHERE u.emailVerified = true AND u.approved = false AND u.deleted = false AND u.role <> com.medsyncpro.entity.Role.ADMIN")
+    List<User> findPendingApprovals();
 }
+

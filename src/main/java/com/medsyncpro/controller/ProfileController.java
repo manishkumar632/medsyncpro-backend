@@ -68,6 +68,20 @@ public class ProfileController {
         return ResponseEntity.ok(ApiResponse.success(updatedProfile, "Profile updated successfully"));
     }
     
+    /**
+     * PUT /api/users/profile — Simple JSON profile update (no file uploads).
+     * This matches the frontend PatientProfilePage which sends PUT + JSON.
+     */
+    @PutMapping(value = "/profile", consumes = org.springframework.http.MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ApiResponse<ProfileResponse>> updateProfileJson(
+            Authentication authentication,
+            @RequestBody com.medsyncpro.dto.UpdateProfileRequest request) {
+        
+        String userId = getUserFromAuth(authentication).getId();
+        ProfileResponse updatedProfile = profileService.simpleUpdateProfile(userId, request);
+        return ResponseEntity.ok(ApiResponse.success(updatedProfile, "Profile updated successfully"));
+    }
+    
     private User getUserFromAuth(Authentication authentication) {
         if (authentication == null || authentication.getPrincipal() == null) {
             throw new BusinessException("UNAUTHORIZED", "User not authenticated");

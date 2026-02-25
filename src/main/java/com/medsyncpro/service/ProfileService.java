@@ -32,7 +32,7 @@ public class ProfileService {
     private final DocumentRepository documentRepository;
     private final FileStorageService fileStorageService;
     private final ProfileMapper profileMapper;
-    private final tools.jackson.databind.ObjectMapper objectMapper;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
     
     @Transactional
     public ProfileResponse updateProfile(
@@ -106,6 +106,28 @@ public class ProfileService {
         return profileMapper.toProfileResponse(user, documents);
     }
     
+    /**
+     * Simple JSON-based profile update (no file uploads).
+     * Used by the frontend PatientProfilePage which sends PUT + JSON.
+     */
+    @Transactional
+    public ProfileResponse simpleUpdateProfile(String userId, UpdateProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        if (user.getDeleted()) {
+            throw new BusinessException("USER_DELETED", "User account is deleted");
+        }
+        
+        applyPartialUpdate(user, request);
+        user.setUpdatedAt(LocalDateTime.now());
+        user = userRepository.save(user);
+        
+        List<Document> documents = documentRepository.findByUserId(userId);
+        log.info("Profile updated (JSON) for user: {}", userId);
+        return profileMapper.toProfileResponse(user, documents);
+    }
+    
     private UpdateProfileRequest parseProfileRequest(String profileJson) {
         if (profileJson == null || profileJson.trim().isEmpty()) {
             return null;
@@ -145,6 +167,18 @@ public class ProfileService {
         
         if (request.getGender() != null) {
             user.setGender(request.getGender());
+        }
+        
+        if (request.getCity() != null) {
+            user.setCity(request.getCity().trim().isEmpty() ? null : request.getCity().trim());
+        }
+        
+        if (request.getState() != null) {
+            user.setState(request.getState().trim().isEmpty() ? null : request.getState().trim());
+        }
+        
+        if (request.getBloodGroup() != null) {
+            user.setBloodGroup(request.getBloodGroup().trim().isEmpty() ? null : request.getBloodGroup().trim());
         }
     }
     

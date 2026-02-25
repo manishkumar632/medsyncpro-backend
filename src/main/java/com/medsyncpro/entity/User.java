@@ -62,6 +62,13 @@ public class User {
     
     private String profileImageUrl;
 
+    private String city;
+
+    private String state;
+
+    @Column(length = 10)
+    private String bloodGroup;
+
     @Column(nullable = false)
     private Integer tokenVersion = 0;
     

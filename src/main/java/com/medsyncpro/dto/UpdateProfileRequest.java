@@ -20,5 +20,12 @@ public class UpdateProfileRequest {
     
     private Gender gender;
     
+    private String city;
+    
+    private String state;
+    
+    @Size(max = 10, message = "Blood group cannot exceed 10 characters")
+    private String bloodGroup;
+    
     private Boolean removeProfileImage;
 }
