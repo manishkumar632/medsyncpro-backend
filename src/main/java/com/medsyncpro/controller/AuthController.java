@@ -261,38 +261,46 @@ public class AuthController {
     }
     
     private void addAccessTokenCookie(HttpServletResponse response, String token) {
-        Cookie cookie = new Cookie("access_token", token);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(true);
-        cookie.setPath("/");
-        cookie.setMaxAge((int) (accessExpiration / 1000));
-        response.addCookie(cookie);
+        org.springframework.http.ResponseCookie cookie = org.springframework.http.ResponseCookie.from("access_token", token)
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(accessExpiration / 1000)
+                .sameSite("None")
+                .build();
+        response.addHeader("Set-Cookie", cookie.toString());
     }
     
     private void addRefreshTokenCookie(HttpServletResponse response, String token) {
-        Cookie cookie = new Cookie("refresh_token", token);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(true);
-        cookie.setPath("/api/auth");  // Scoped to auth endpoints only
-        cookie.setMaxAge((int) (refreshExpiration / 1000));
-        response.addCookie(cookie);
+        org.springframework.http.ResponseCookie cookie = org.springframework.http.ResponseCookie.from("refresh_token", token)
+                .httpOnly(true)
+                .secure(true)
+                .path("/api/auth")
+                .maxAge(refreshExpiration / 1000)
+                .sameSite("None")
+                .build();
+        response.addHeader("Set-Cookie", cookie.toString());
     }
     
     private void clearAccessTokenCookie(HttpServletResponse response) {
-        Cookie cookie = new Cookie("access_token", null);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(true);
-        cookie.setPath("/");
-        cookie.setMaxAge(0);
-        response.addCookie(cookie);
+        org.springframework.http.ResponseCookie cookie = org.springframework.http.ResponseCookie.from("access_token", "")
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(0)
+                .sameSite("None")
+                .build();
+        response.addHeader("Set-Cookie", cookie.toString());
     }
     
     private void clearRefreshTokenCookie(HttpServletResponse response) {
-        Cookie cookie = new Cookie("refresh_token", null);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(true);
-        cookie.setPath("/api/auth");
-        cookie.setMaxAge(0);
-        response.addCookie(cookie);
+        org.springframework.http.ResponseCookie cookie = org.springframework.http.ResponseCookie.from("refresh_token", "")
+                .httpOnly(true)
+                .secure(true)
+                .path("/api/auth")
+                .maxAge(0)
+                .sameSite("None")
+                .build();
+        response.addHeader("Set-Cookie", cookie.toString());
     }
 }
