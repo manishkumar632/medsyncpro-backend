@@ -1,5 +1,6 @@
 package com.medsyncpro.repository;
 
+import com.medsyncpro.entity.Role;
 import com.medsyncpro.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -15,4 +16,9 @@ public interface UserRepository extends JpaRepository<User, String> {
     
     @Query("SELECT COUNT(u) FROM User u WHERE u.email = ?1 AND u.createdAt > ?2")
     long countRecentRegistrationsByEmail(String email, LocalDateTime since);
+    
+    long countByRoleAndDeletedFalse(Role role);
+    
+    @Query("SELECT COUNT(u) FROM User u WHERE u.emailVerified = true AND u.approved = false AND u.deleted = false AND u.role <> com.medsyncpro.entity.Role.ADMIN")
+    long countPendingApprovals();
 }

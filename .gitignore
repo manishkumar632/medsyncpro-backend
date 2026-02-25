@@ -33,3 +33,8 @@ build/
 .vscode/
 note.txt
 application-dev.properties
+
+# Firebase secrets
+*.json
+!package.json
+!tsconfig.json
