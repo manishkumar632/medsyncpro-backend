@@ -37,14 +37,18 @@ public class VerificationRequest {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private VerificationStatus status = VerificationStatus.PENDING;
+    private VerificationStatus status = VerificationStatus.UNVERIFIED;
 
     @Column(length = 1000)
-    private String comments;
+    private String reviewNotes;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    private LocalDateTime submittedAt;
+
+    private LocalDateTime reviewedAt;
 }

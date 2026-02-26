@@ -32,4 +32,6 @@ public class ProfileResponse {
     private Boolean emailVerified;
     private LocalDateTime updatedAt;
     private List<DocumentResponse> documents;
+    private String bio;
+    private Integer experienceYears;
 }

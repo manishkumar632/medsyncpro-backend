@@ -11,4 +11,5 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     List<Document> findByUserId(String userId);
     Optional<Document> findByUserIdAndType(String userId, DocumentType type);
     void deleteByUserIdAndId(String userId, Long id);
+    void deleteByUserIdAndType(String userId, DocumentType type);
 }

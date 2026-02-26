@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -15,5 +16,8 @@ import java.util.List;
 public class VerificationStatusResponse {
     private VerificationStatus status;
     private List<DocumentResponse> submittedDocuments;
+    private List<RequiredDocumentItem> requiredDocuments;
     private String verificationNotes;
+    private LocalDateTime submittedAt;
+    private LocalDateTime reviewedAt;
 }

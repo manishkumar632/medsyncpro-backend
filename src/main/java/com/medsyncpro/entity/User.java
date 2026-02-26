@@ -66,6 +66,11 @@ public class User {
     @Column(length = 10)
     private String bloodGroup;
 
+    @Column(columnDefinition = "TEXT")
+    private String bio;
+
+    private Integer experienceYears;
+
     @Column(length = 255)
     private String fcmToken;
 

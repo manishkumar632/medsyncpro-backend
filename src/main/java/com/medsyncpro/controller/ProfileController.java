@@ -2,6 +2,8 @@ package com.medsyncpro.controller;
 
 import com.medsyncpro.dto.LoginResponse;
 import com.medsyncpro.dto.ProfileResponse;
+import com.medsyncpro.dto.RequiredDocumentItem;
+import com.medsyncpro.entity.DocumentType;
 import com.medsyncpro.entity.User;
 import com.medsyncpro.exception.BusinessException;
 import com.medsyncpro.repository.UserRepository;
@@ -29,9 +31,6 @@ public class ProfileController {
     
     /**
      * Lightweight session validation endpoint.
-     * Returns basic user info for the currently authenticated user.
-     * All security checks (expired token, blacklisted, deleted user, token version)
-     * are handled by JwtAuthenticationFilter before this endpoint is reached.
      */
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<LoginResponse>> getCurrentUser(Authentication authentication) {
@@ -70,7 +69,6 @@ public class ProfileController {
     
     /**
      * PUT /api/users/profile — Simple JSON profile update (no file uploads).
-     * This matches the frontend PatientProfilePage which sends PUT + JSON.
      */
     @PutMapping(value = "/profile", consumes = org.springframework.http.MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ApiResponse<ProfileResponse>> updateProfileJson(
@@ -88,6 +86,69 @@ public class ProfileController {
         com.medsyncpro.dto.VerificationStatusResponse status = profileService.getVerificationStatus(userId);
         return ResponseEntity.ok(ApiResponse.success(status, "Verification status retrieved"));
     }
+    
+    /**
+     * GET /api/users/me/required-documents — get the required documents checklist with upload status.
+     */
+    @GetMapping("/me/required-documents")
+    public ResponseEntity<ApiResponse<List<RequiredDocumentItem>>> getRequiredDocuments(Authentication authentication) {
+        String userId = getUserFromAuth(authentication).getId();
+        List<RequiredDocumentItem> docs = profileService.getRequiredDocuments(userId);
+        return ResponseEntity.ok(ApiResponse.success(docs, "Required documents list retrieved"));
+    }
+    
+    /**
+     * POST /api/users/me/documents/{type} — upload a single document by type (replaces if exists).
+     */
+    @PostMapping(value = "/me/documents/{type}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<com.medsyncpro.dto.VerificationStatusResponse>> uploadSingleDocument(
+            Authentication authentication,
+            @PathVariable String type,
+            @RequestPart("file") MultipartFile file) {
+        
+        String userId = getUserFromAuth(authentication).getId();
+        DocumentType docType;
+        try {
+            docType = DocumentType.valueOf(type.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("INVALID_DOCUMENT_TYPE", "Invalid document type: " + type);
+        }
+        
+        com.medsyncpro.dto.VerificationStatusResponse status = profileService.uploadSingleDocument(userId, docType, file);
+        return ResponseEntity.ok(ApiResponse.success(status, "Document uploaded successfully"));
+    }
+    
+    /**
+     * DELETE /api/users/me/documents/{type} — delete a document by type.
+     */
+    @DeleteMapping("/me/documents/{type}")
+    public ResponseEntity<ApiResponse<com.medsyncpro.dto.VerificationStatusResponse>> deleteSingleDocument(
+            Authentication authentication,
+            @PathVariable String type) {
+        
+        String userId = getUserFromAuth(authentication).getId();
+        DocumentType docType;
+        try {
+            docType = DocumentType.valueOf(type.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("INVALID_DOCUMENT_TYPE", "Invalid document type: " + type);
+        }
+        
+        com.medsyncpro.dto.VerificationStatusResponse status = profileService.deleteSingleDocument(userId, docType);
+        return ResponseEntity.ok(ApiResponse.success(status, "Document deleted successfully"));
+    }
+    
+    /**
+     * POST /api/users/me/submit-verification — submit for admin review.
+     */
+    @PostMapping("/me/submit-verification")
+    public ResponseEntity<ApiResponse<com.medsyncpro.dto.VerificationStatusResponse>> submitForVerification(Authentication authentication) {
+        String userId = getUserFromAuth(authentication).getId();
+        com.medsyncpro.dto.VerificationStatusResponse status = profileService.submitForVerification(userId);
+        return ResponseEntity.ok(ApiResponse.success(status, "Verification submitted successfully. Our team will review your documents."));
+    }
+    
+    // ── Legacy batch upload (kept for backward compatibility) ──
     
     @PostMapping(value = "/me/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<com.medsyncpro.dto.VerificationStatusResponse>> uploadDocuments(

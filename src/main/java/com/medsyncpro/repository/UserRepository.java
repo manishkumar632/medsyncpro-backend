@@ -24,7 +24,7 @@ public interface UserRepository extends JpaRepository<User, String> {
     
     long countByRoleAndDeletedFalse(Role role);
     
-    @Query("SELECT COUNT(u) FROM User u WHERE u.emailVerified = true AND u.professionalVerificationStatus IN (com.medsyncpro.entity.VerificationStatus.PENDING, com.medsyncpro.entity.VerificationStatus.DOCUMENT_SUBMITTED) AND u.deleted = false AND u.role <> com.medsyncpro.entity.Role.ADMIN")
+    @Query("SELECT COUNT(u) FROM User u WHERE u.emailVerified = true AND u.professionalVerificationStatus IN (com.medsyncpro.entity.VerificationStatus.UNDER_REVIEW, com.medsyncpro.entity.VerificationStatus.DOCUMENT_SUBMITTED) AND u.deleted = false AND u.role <> com.medsyncpro.entity.Role.ADMIN")
     long countPendingApprovals();
     
     // ── Admin user listing queries ──
@@ -44,7 +44,7 @@ public interface UserRepository extends JpaRepository<User, String> {
     Page<User> findByRoleAndVerificationStatusAndSearch(@Param("role") Role role, @Param("status") VerificationStatus status, @Param("search") String search, Pageable pageable);
     
     // Pending approvals list (email verified but not approved, non-admin)
-    @Query("SELECT u FROM User u WHERE u.emailVerified = true AND u.professionalVerificationStatus IN (com.medsyncpro.entity.VerificationStatus.PENDING, com.medsyncpro.entity.VerificationStatus.DOCUMENT_SUBMITTED) AND u.deleted = false AND u.role <> com.medsyncpro.entity.Role.ADMIN")
+    @Query("SELECT u FROM User u WHERE u.emailVerified = true AND u.professionalVerificationStatus IN (com.medsyncpro.entity.VerificationStatus.UNDER_REVIEW, com.medsyncpro.entity.VerificationStatus.DOCUMENT_SUBMITTED) AND u.deleted = false AND u.role <> com.medsyncpro.entity.Role.ADMIN")
     List<User> findPendingApprovals();
 }
 

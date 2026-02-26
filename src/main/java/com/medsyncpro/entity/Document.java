@@ -31,9 +31,9 @@ public class Document {
     @Column(nullable = false)
     private Long fileSize;
     
+    @Column(nullable = false, length = 20)
+    private String status = "UPLOADED";
+    
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
-    
-    @Version
-    private Long version;
 }

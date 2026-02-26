@@ -101,28 +101,52 @@ public class AdminService {
     }
     
     /**
-     * Approve a user — sets approved=true.
+     * Approve a user — sets verified. Publishes event for realtime notification.
+     * Idempotent: if already VERIFIED, returns current state without re-publishing.
      */
     @Transactional
     public AdminUserListResponse approveUser(String userId) {
         User user = findUserOrThrow(userId);
+        
+        // Idempotent: skip if already verified
+        if (user.getProfessionalVerificationStatus() == com.medsyncpro.entity.VerificationStatus.VERIFIED) {
+            log.info("User {} already verified, skipping", userId);
+            return toAdminUserResponse(user);
+        }
+        
         user.setProfessionalVerificationStatus(com.medsyncpro.entity.VerificationStatus.VERIFIED);
         user.setUpdatedAt(LocalDateTime.now());
         user = userRepository.save(user);
         log.info("User {} approved by admin", userId);
+        
+        // Publish event → SSE notification to doctor + stored notification
+        eventPublisher.publishEvent(new com.medsyncpro.event.VerificationDecisionEvent(
+                this, user, com.medsyncpro.entity.VerificationStatus.VERIFIED, null));
+        
         return toAdminUserResponse(user);
     }
     
     /**
-     * Reject a user — sets approved=false (they can re-submit).
+     * Reject a user — sets rejected. Publishes event for realtime notification.
+     * Idempotent: if already REJECTED, returns current state.
      */
     @Transactional
     public AdminUserListResponse rejectUser(String userId) {
         User user = findUserOrThrow(userId);
+        
+        if (user.getProfessionalVerificationStatus() == com.medsyncpro.entity.VerificationStatus.REJECTED) {
+            log.info("User {} already rejected, skipping", userId);
+            return toAdminUserResponse(user);
+        }
+        
         user.setProfessionalVerificationStatus(com.medsyncpro.entity.VerificationStatus.REJECTED);
         user.setUpdatedAt(LocalDateTime.now());
         user = userRepository.save(user);
         log.info("User {} rejected by admin", userId);
+        
+        eventPublisher.publishEvent(new com.medsyncpro.event.VerificationDecisionEvent(
+                this, user, com.medsyncpro.entity.VerificationStatus.REJECTED, null));
+        
         return toAdminUserResponse(user);
     }
     
@@ -140,7 +164,7 @@ public class AdminService {
     }
     
     /**
-     * Activate a user — un-delete + approve.
+     * Activate a user — un-delete + approve. Publishes event.
      */
     @Transactional
     public AdminUserListResponse activateUser(String userId) {
@@ -151,6 +175,10 @@ public class AdminService {
         user.setUpdatedAt(LocalDateTime.now());
         user = userRepository.save(user);
         log.info("User {} activated by admin", userId);
+        
+        eventPublisher.publishEvent(new com.medsyncpro.event.VerificationDecisionEvent(
+                this, user, com.medsyncpro.entity.VerificationStatus.VERIFIED, null));
+        
         return toAdminUserResponse(user);
     }
     
@@ -192,16 +220,55 @@ public class AdminService {
                 .orElseThrow(() -> new ResourceNotFoundException("Verification Request not found"));
     }
 
+    @Transactional(readOnly = true)
+    public com.medsyncpro.dto.AdminVerificationDetailResponse getVerificationDetail(String id) {
+        VerificationRequest request = getVerificationRequest(id);
+        User user = request.getUser();
+        
+        List<Document> docs = documentRepository.findByUserId(user.getId());
+        List<DocumentResponse> docResponses = docs.stream()
+                .map(d -> DocumentResponse.builder()
+                        .id(d.getId())
+                        .type(d.getType())
+                        .url(d.getUrl())
+                        .fileName(d.getFileName())
+                        .fileSize(d.getFileSize())
+                        .createdAt(d.getCreatedAt())
+                        .build())
+                .collect(Collectors.toList());
+        
+        return com.medsyncpro.dto.AdminVerificationDetailResponse.builder()
+                .id(request.getId())
+                .status(request.getStatus())
+                .reviewNotes(request.getReviewNotes())
+                .createdAt(request.getCreatedAt())
+                .updatedAt(request.getUpdatedAt())
+                .submittedAt(request.getSubmittedAt())
+                .reviewedAt(request.getReviewedAt())
+                .user(com.medsyncpro.dto.AdminVerificationDetailResponse.UserSummary.builder()
+                        .id(user.getId())
+                        .name(user.getName())
+                        .email(user.getEmail())
+                        .phone(user.getPhone())
+                        .role(user.getRole().name())
+                        .profileImageUrl(user.getProfileImageUrl())
+                        .createdAt(user.getCreatedAt())
+                        .build())
+                .documents(docResponses)
+                .build();
+    }
+
     @Transactional
     public void approveVerificationRequest(String id, String adminId) {
         VerificationRequest request = getVerificationRequest(id);
-        if (request.getStatus() == VerificationStatus.APPROVED) return;
+        if (request.getStatus() == VerificationStatus.VERIFIED) return;
 
         User user = request.getUser();
         user.setProfessionalVerificationStatus(VerificationStatus.VERIFIED);
         userRepository.save(user);
 
-        request.setStatus(VerificationStatus.APPROVED);
+        request.setStatus(VerificationStatus.VERIFIED);
+        request.setReviewedAt(LocalDateTime.now());
         verificationRequestRepository.save(request);
 
         // Notify user via Event
@@ -218,7 +285,8 @@ public class AdminService {
         userRepository.save(user);
 
         request.setStatus(VerificationStatus.REJECTED);
-        request.setComments(comments);
+        request.setReviewNotes(comments);
+        request.setReviewedAt(LocalDateTime.now());
         verificationRequestRepository.save(request);
 
         // Notify user via Event

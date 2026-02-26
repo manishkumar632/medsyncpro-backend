@@ -1,16 +1,13 @@
 package com.medsyncpro.service;
 
 import com.medsyncpro.dto.ProfileResponse;
+import com.medsyncpro.dto.RequiredDocumentItem;
 import com.medsyncpro.dto.UpdateProfileRequest;
 import com.medsyncpro.entity.Document;
 import com.medsyncpro.entity.DocumentType;
 import com.medsyncpro.entity.User;
-import com.medsyncpro.exception.BusinessException;
-import com.medsyncpro.exception.ResourceNotFoundException;
-import com.medsyncpro.mapper.ProfileMapper;
-import com.medsyncpro.repository.DocumentRepository;
-import com.medsyncpro.entity.User;
 import com.medsyncpro.entity.VerificationRequest;
+import com.medsyncpro.entity.VerificationStatus;
 import com.medsyncpro.exception.BusinessException;
 import com.medsyncpro.exception.ResourceNotFoundException;
 import com.medsyncpro.mapper.ProfileMapper;
@@ -27,9 +24,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -43,7 +39,197 @@ public class ProfileService {
     private final ApplicationEventPublisher eventPublisher;
     private final ProfileMapper profileMapper;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    // ── Required documents configuration ──
     
+    private static final List<RequiredDocInfo> REQUIRED_DOCS = List.of(
+            new RequiredDocInfo(DocumentType.LICENSE, "Medical License / Medical Certificate", true),
+            new RequiredDocInfo(DocumentType.ID_PROOF, "Government ID Proof", true),
+            new RequiredDocInfo(DocumentType.DEGREE, "Degree Certificate", true)
+    );
+
+    private record RequiredDocInfo(DocumentType type, String label, boolean required) {}
+
+    // ── Required documents checklist ──
+    
+    @Transactional(readOnly = true)
+    public List<RequiredDocumentItem> getRequiredDocuments(String userId) {
+        List<Document> userDocs = documentRepository.findByUserId(userId);
+        Map<DocumentType, Document> docMap = new HashMap<>();
+        for (Document doc : userDocs) {
+            docMap.put(doc.getType(), doc);
+        }
+        
+        return REQUIRED_DOCS.stream()
+                .map(info -> {
+                    Document doc = docMap.get(info.type());
+                    return RequiredDocumentItem.builder()
+                            .type(info.type())
+                            .label(info.label())
+                            .required(info.required())
+                            .uploaded(doc != null)
+                            .fileUrl(doc != null ? doc.getUrl() : null)
+                            .fileName(doc != null ? doc.getFileName() : null)
+                            .fileSize(doc != null ? doc.getFileSize() : null)
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+    
+    // ── Single document upload by type ──
+    
+    @Transactional
+    public com.medsyncpro.dto.VerificationStatusResponse uploadSingleDocument(String userId, DocumentType type, MultipartFile file) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        if (user.getDeleted()) {
+            throw new BusinessException("USER_DELETED", "User account is deleted");
+        }
+        
+        // Don't allow upload if already verified or under review
+        VerificationStatus currentStatus = user.getProfessionalVerificationStatus();
+        if (currentStatus == VerificationStatus.VERIFIED) {
+            throw new BusinessException("ALREADY_VERIFIED", "Your account is already verified");
+        }
+        if (currentStatus == VerificationStatus.UNDER_REVIEW) {
+            throw new BusinessException("UNDER_REVIEW", "Your verification is under review. You cannot modify documents");
+        }
+        
+        String url = fileStorageService.uploadDocument(file, userId);
+        
+        try {
+            // Check if document of this type already exists — replace it
+            Optional<Document> existing = documentRepository.findByUserIdAndType(userId, type);
+            if (existing.isPresent()) {
+                Document existingDoc = existing.get();
+                // Delete old file
+                try {
+                    fileStorageService.deleteFile(existingDoc.getUrl());
+                } catch (Exception e) {
+                    log.warn("Failed to delete old document file: {}", existingDoc.getUrl());
+                }
+                existingDoc.setUrl(url);
+                existingDoc.setFileName(file.getOriginalFilename());
+                existingDoc.setFileSize(file.getSize());
+                existingDoc.setStatus("UPLOADED");
+                existingDoc.setCreatedAt(LocalDateTime.now());
+                documentRepository.save(existingDoc);
+            } else {
+                Document document = new Document();
+                document.setUserId(userId);
+                document.setType(type);
+                document.setUrl(url);
+                document.setFileName(file.getOriginalFilename());
+                document.setFileSize(file.getSize());
+                document.setStatus("UPLOADED");
+                documentRepository.save(document);
+            }
+            
+            // Update user status to DOCUMENT_SUBMITTED if UNVERIFIED or REJECTED
+            if (currentStatus == VerificationStatus.UNVERIFIED || currentStatus == VerificationStatus.REJECTED) {
+                user.setProfessionalVerificationStatus(VerificationStatus.DOCUMENT_SUBMITTED);
+                userRepository.save(user);
+            }
+            
+            return getVerificationStatus(userId);
+            
+        } catch (Exception e) {
+            // Rollback file upload on error
+            try {
+                fileStorageService.deleteFile(url);
+            } catch (Exception ex) {
+                log.error("Failed to rollback uploaded file: {}", url);
+            }
+            throw e;
+        }
+    }
+    
+    // ── Delete a single document by type ──
+    
+    @Transactional
+    public com.medsyncpro.dto.VerificationStatusResponse deleteSingleDocument(String userId, DocumentType type) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        VerificationStatus currentStatus = user.getProfessionalVerificationStatus();
+        if (currentStatus == VerificationStatus.VERIFIED) {
+            throw new BusinessException("ALREADY_VERIFIED", "Cannot modify documents — already verified");
+        }
+        if (currentStatus == VerificationStatus.UNDER_REVIEW) {
+            throw new BusinessException("UNDER_REVIEW", "Cannot modify documents while under review");
+        }
+        
+        Optional<Document> existing = documentRepository.findByUserIdAndType(userId, type);
+        if (existing.isPresent()) {
+            try {
+                fileStorageService.deleteFile(existing.get().getUrl());
+            } catch (Exception e) {
+                log.warn("Failed to delete file: {}", existing.get().getUrl());
+            }
+            documentRepository.deleteByUserIdAndType(userId, type);
+        }
+        
+        return getVerificationStatus(userId);
+    }
+    
+    // ── Submit for verification ──
+    
+    @Transactional
+    public com.medsyncpro.dto.VerificationStatusResponse submitForVerification(String userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        VerificationStatus currentStatus = user.getProfessionalVerificationStatus();
+        if (currentStatus == VerificationStatus.VERIFIED) {
+            throw new BusinessException("ALREADY_VERIFIED", "Your account is already verified");
+        }
+        if (currentStatus == VerificationStatus.UNDER_REVIEW) {
+            throw new BusinessException("ALREADY_SUBMITTED", "Your verification is already under review");
+        }
+        
+        // Validate all required documents are uploaded
+        List<Document> userDocs = documentRepository.findByUserId(userId);
+        Set<DocumentType> uploadedTypes = userDocs.stream()
+                .map(Document::getType)
+                .collect(Collectors.toSet());
+        
+        List<String> missingDocs = REQUIRED_DOCS.stream()
+                .filter(RequiredDocInfo::required)
+                .filter(info -> !uploadedTypes.contains(info.type()))
+                .map(RequiredDocInfo::label)
+                .collect(Collectors.toList());
+        
+        if (!missingDocs.isEmpty()) {
+            throw new BusinessException("MISSING_DOCUMENTS", 
+                    "Missing required documents: " + String.join(", ", missingDocs));
+        }
+        
+        // Update status to UNDER_REVIEW
+        user.setProfessionalVerificationStatus(VerificationStatus.UNDER_REVIEW);
+        userRepository.save(user);
+        
+        // Update or create verification request
+        VerificationRequest request = verificationRequestRepository.findByUserId(userId).orElse(null);
+        if (request == null) {
+            request = new VerificationRequest();
+            request.setUser(user);
+        }
+        request.setStatus(VerificationStatus.UNDER_REVIEW);
+        request.setSubmittedAt(LocalDateTime.now());
+        request.setReviewNotes(null);
+        request.setReviewedAt(null);
+        verificationRequestRepository.save(request);
+        
+        // Notify admins
+        eventPublisher.publishEvent(new com.medsyncpro.event.DocumentSubmittedEvent(this, user));
+        
+        log.info("User {} submitted for verification", userId);
+        return getVerificationStatus(userId);
+    }
+    
+    // ── Existing methods ──
+
     @Transactional
     public ProfileResponse updateProfile(
             String userId,
@@ -118,7 +304,6 @@ public class ProfileService {
     
     /**
      * Simple JSON-based profile update (no file uploads).
-     * Used by the frontend PatientProfilePage which sends PUT + JSON.
      */
     @Transactional
     public ProfileResponse simpleUpdateProfile(String userId, UpdateProfileRequest request) {
@@ -144,17 +329,24 @@ public class ProfileService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         
         VerificationRequest request = verificationRequestRepository.findByUserId(userId).orElse(null);
-        String comments = request != null ? request.getComments() : null;
+        String reviewNotes = request != null ? request.getReviewNotes() : null;
+        LocalDateTime submittedAt = request != null ? request.getSubmittedAt() : null;
+        LocalDateTime reviewedAt = request != null ? request.getReviewedAt() : null;
         
         List<Document> documents = documentRepository.findByUserId(userId);
         List<com.medsyncpro.dto.DocumentResponse> documentResponses = documents.stream()
                 .map(profileMapper::toDocumentResponse)
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
+        
+        List<RequiredDocumentItem> requiredDocs = getRequiredDocuments(userId);
                 
         return com.medsyncpro.dto.VerificationStatusResponse.builder()
                 .status(user.getProfessionalVerificationStatus())
                 .submittedDocuments(documentResponses)
-                .verificationNotes(comments)
+                .requiredDocuments(requiredDocs)
+                .verificationNotes(reviewNotes)
+                .submittedAt(submittedAt)
+                .reviewedAt(reviewedAt)
                 .build();
     }
     
@@ -174,7 +366,7 @@ public class ProfileService {
                 handleDocumentUploads(user, documents, documentTypes, uploadedUrls);
             }
             
-            user.setProfessionalVerificationStatus(com.medsyncpro.entity.VerificationStatus.DOCUMENT_SUBMITTED);
+            user.setProfessionalVerificationStatus(VerificationStatus.DOCUMENT_SUBMITTED);
             user = userRepository.save(user);
             
             VerificationRequest request = verificationRequestRepository.findByUserId(userId).orElse(null);
@@ -182,7 +374,7 @@ public class ProfileService {
                 request = new VerificationRequest();
                 request.setUser(user);
             }
-            request.setStatus(com.medsyncpro.entity.VerificationStatus.DOCUMENT_SUBMITTED);
+            request.setStatus(VerificationStatus.DOCUMENT_SUBMITTED);
             verificationRequestRepository.save(request);
             
             // Publish Event to notify admins
@@ -247,6 +439,10 @@ public class ProfileService {
         
         if (request.getBloodGroup() != null) {
             user.setBloodGroup(request.getBloodGroup().trim().isEmpty() ? null : request.getBloodGroup().trim());
+        }
+        
+        if (request.getBio() != null) {
+            user.setBio(request.getBio().trim().isEmpty() ? null : request.getBio().trim());
         }
     }
     

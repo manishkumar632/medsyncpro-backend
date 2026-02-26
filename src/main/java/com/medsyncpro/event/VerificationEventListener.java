@@ -7,6 +7,7 @@ import com.medsyncpro.repository.NotificationRepository;
 import com.medsyncpro.repository.UserRepository;
 import com.medsyncpro.repository.VerificationRequestRepository;
 import com.medsyncpro.service.FirebasePushService;
+import com.medsyncpro.service.SseEmitterService;
 import com.medsyncpro.entity.VerificationRequest;
 import com.medsyncpro.entity.VerificationStatus;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -28,6 +30,7 @@ public class VerificationEventListener {
     private final NotificationRepository notificationRepository;
     private final FirebasePushService firebasePushService;
     private final VerificationRequestRepository verificationRequestRepository;
+    private final SseEmitterService sseEmitterService;
 
     @Async
     @EventListener
@@ -51,7 +54,14 @@ public class VerificationEventListener {
         notification.setRecipientId(null); 
         notificationRepository.save(notification);
 
-        // 3. Trigger Firebase notification (Mocking 'admins' topic send for now)
+        // 3. Send SSE event to all connected admins
+        sseEmitterService.sendToAdmins("notification", Map.of(
+                "type", "VERIFICATION_REQUEST",
+                "title", notification.getTitle(),
+                "message", notification.getMessage()
+        ));
+
+        // 4. Trigger Firebase notification
         log.info("🔔 Would send FCM Push Notification to Admin Topic here: New {} requires verification", user.getRole());
     }
 
@@ -60,8 +70,8 @@ public class VerificationEventListener {
     @Transactional
     public void onDocumentSubmitted(DocumentSubmittedEvent event) {
         User user = event.getUser();
-        String title = "New Document Submission";
-        String message = "User " + user.getName() + " (" + user.getEmail() + ") has submitted verification documents.";
+        String title = "Verification Documents Submitted";
+        String message = "Dr. " + user.getName() + " has submitted documents for professional verification.";
 
         log.info("Handling DocumentSubmittedEvent for user: {}", user.getEmail());
 
@@ -84,6 +94,13 @@ public class VerificationEventListener {
                 firebasePushService.sendPushNotification(admin.getFcmToken(), title, message);
             }
         }
+
+        // Send SSE event to all connected admins (broadcast)
+        sseEmitterService.sendToAdmins("notification", Map.of(
+                "type", "VERIFICATION_REQUEST",
+                "title", title,
+                "message", message
+        ));
     }
 
     @Async
@@ -110,6 +127,14 @@ public class VerificationEventListener {
         notification.setIsRead(false);
         notification.setCreatedAt(LocalDateTime.now());
         notificationRepository.save(notification);
+
+        // Send SSE event to user for realtime badge update
+        sseEmitterService.sendToUser(user.getId(), "notification", Map.of(
+                "type", "VERIFICATION_DECISION",
+                "title", title,
+                "message", message,
+                "verificationStatus", status
+        ));
 
         // Send Push Notification if User has an FCM Token
         if (user.getFcmToken() != null && !user.getFcmToken().isBlank()) {

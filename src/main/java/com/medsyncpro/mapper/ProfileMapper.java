@@ -28,6 +28,8 @@ public class ProfileMapper {
                 .role(user.getRole())
                 .emailVerified(user.getEmailVerified())
                 .updatedAt(user.getUpdatedAt())
+                .bio(user.getBio())
+                .experienceYears(user.getExperienceYears())
                 .documents(documents.stream()
                         .map(this::toDocumentResponse)
                         .collect(Collectors.toList()))

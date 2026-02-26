@@ -133,9 +133,9 @@ public class AdminController {
     }
 
     @GetMapping("/verifications/{id}")
-    public ResponseEntity<ApiResponse<VerificationRequest>> getVerification(@PathVariable String id) {
+    public ResponseEntity<ApiResponse<com.medsyncpro.dto.AdminVerificationDetailResponse>> getVerification(@PathVariable String id) {
         return ResponseEntity.ok(ApiResponse.success(
-            adminService.getVerificationRequest(id), "Verification details fetched"
+            adminService.getVerificationDetail(id), "Verification details fetched"
         ));
     }
 

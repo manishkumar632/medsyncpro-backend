@@ -28,4 +28,7 @@ public class UpdateProfileRequest {
     private String bloodGroup;
     
     private Boolean removeProfileImage;
+
+    @Size(max = 2000, message = "Bio cannot exceed 2000 characters")
+    private String bio;
 }
