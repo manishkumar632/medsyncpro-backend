@@ -20,7 +20,7 @@ public class AdminUserListResponse {
     private String email;
     private String phone;
     private Role role;
-    private Boolean approved;
+    private com.medsyncpro.entity.VerificationStatus professionalVerificationStatus;
     private Boolean emailVerified;
     private Boolean deleted;
     private String profileImageUrl;

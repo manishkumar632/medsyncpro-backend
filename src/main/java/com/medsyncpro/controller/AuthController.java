@@ -105,7 +105,7 @@ public class AuthController {
         addRefreshTokenCookie(response, newRefreshToken.getToken());
         
         LoginResponse loginResponse = new LoginResponse(
-                user.getId(), user.getEmail(), user.getName(), user.getRole());
+                user.getId(), user.getEmail(), user.getName(), user.getRole(), user.getProfessionalVerificationStatus());
         
         log.info("Token refreshed for user {} on device {}", user.getEmail(), deviceInfo);
         return ResponseEntity.ok(ApiResponse.success(loginResponse, "Token refreshed successfully"));

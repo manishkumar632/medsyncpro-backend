@@ -1,14 +1,17 @@
 package com.medsyncpro.controller;
 
-import com.medsyncpro.dto.AdminStatsResponse;
-import com.medsyncpro.dto.AdminUserListResponse;
-import com.medsyncpro.dto.PagedResponse;
+import com.medsyncpro.dto.*;
 import com.medsyncpro.entity.Role;
+import com.medsyncpro.entity.Notification;
+import com.medsyncpro.entity.User;
+import com.medsyncpro.entity.VerificationRequest;
 import com.medsyncpro.response.ApiResponse;
 import com.medsyncpro.service.AdminService;
+import com.medsyncpro.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,6 +23,7 @@ import java.util.List;
 public class AdminController {
     
     private final AdminService adminService;
+    private final UserService userService;
     
     /**
      * GET /api/admin/stats
@@ -91,5 +95,68 @@ public class AdminController {
     public ResponseEntity<ApiResponse<AdminUserListResponse>> activateUser(@PathVariable String id) {
         AdminUserListResponse user = adminService.activateUser(id);
         return ResponseEntity.ok(ApiResponse.success(user, "User activated"));
+    }
+
+    // ==================== FCM & NOTIFICATIONS ====================
+
+    @PostMapping("/fcm-token")
+    public ResponseEntity<ApiResponse<Void>> registerFcmToken(
+            @RequestBody FcmTokenRequest request, 
+            Authentication authentication) {
+        String email = authentication.getName();
+        User admin = userService.getUserByEmail(email);
+        adminService.registerFcmToken(admin.getId(), request.getToken());
+        return ResponseEntity.ok(ApiResponse.success(null, "FCM Token registered successfully"));
+    }
+
+    @GetMapping("/notifications")
+    public ResponseEntity<ApiResponse<List<Notification>>> getNotifications(Authentication authentication) {
+        String email = authentication.getName();
+        User admin = userService.getUserByEmail(email);
+        List<Notification> notifications = adminService.getAdminNotifications(admin.getId());
+        return ResponseEntity.ok(ApiResponse.success(notifications, "Notifications fetched successfully"));
+    }
+
+    @PutMapping("/notifications/{id}/read")
+    public ResponseEntity<ApiResponse<Void>> markNotificationRead(@PathVariable String id) {
+        adminService.markNotificationAsRead(id);
+        return ResponseEntity.ok(ApiResponse.success(null, "Notification marked read"));
+    }
+
+    // ==================== VERIFICATION REQUESTS ====================
+
+    @GetMapping("/verifications")
+    public ResponseEntity<ApiResponse<List<VerificationRequest>>> getAllVerifications() {
+        return ResponseEntity.ok(ApiResponse.success(
+            adminService.getAllVerificationRequests(), "Verification requests fetched"
+        ));
+    }
+
+    @GetMapping("/verifications/{id}")
+    public ResponseEntity<ApiResponse<VerificationRequest>> getVerification(@PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.success(
+            adminService.getVerificationRequest(id), "Verification details fetched"
+        ));
+    }
+
+    @PostMapping("/verifications/{id}/approve")
+    public ResponseEntity<ApiResponse<Void>> approveVerification(
+            @PathVariable String id, 
+            Authentication authentication) {
+        String email = authentication.getName();
+        User admin = userService.getUserByEmail(email);
+        adminService.approveVerificationRequest(id, admin.getId());
+        return ResponseEntity.ok(ApiResponse.success(null, "Verification approved successfully"));
+    }
+
+    @PostMapping("/verifications/{id}/reject")
+    public ResponseEntity<ApiResponse<Void>> rejectVerification(
+            @PathVariable String id, 
+            @RequestBody VerificationActionRequest request,
+            Authentication authentication) {
+        String email = authentication.getName();
+        User admin = userService.getUserByEmail(email);
+        adminService.rejectVerificationRequest(id, admin.getId(), request.getComment());
+        return ResponseEntity.ok(ApiResponse.success(null, "Verification rejected successfully"));
     }
 }

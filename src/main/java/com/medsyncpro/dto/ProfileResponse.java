@@ -28,7 +28,7 @@ public class ProfileResponse {
     private String state;
     private String bloodGroup;
     private Role role;
-    private Boolean approved;
+    private com.medsyncpro.entity.VerificationStatus professionalVerificationStatus;
     private Boolean emailVerified;
     private LocalDateTime updatedAt;
     private List<DocumentResponse> documents;

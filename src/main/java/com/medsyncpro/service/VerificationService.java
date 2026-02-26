@@ -89,9 +89,9 @@ public class VerificationService {
         // Activate user
         user.setEmailVerified(true);
         
-        // Auto-approve PATIENT, others need admin approval
+        // Auto-approve PATIENT verify status
         if (user.getRole() == Role.PATIENT) {
-            user.setApproved(true);
+            user.setProfessionalVerificationStatus(com.medsyncpro.entity.VerificationStatus.VERIFIED);
         }
         
         userRepository.save(user);

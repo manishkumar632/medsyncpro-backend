@@ -26,7 +26,6 @@ public class ProfileMapper {
                 .state(user.getState())
                 .bloodGroup(user.getBloodGroup())
                 .role(user.getRole())
-                .approved(user.getApproved())
                 .emailVerified(user.getEmailVerified())
                 .updatedAt(user.getUpdatedAt())
                 .documents(documents.stream()

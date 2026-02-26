@@ -36,7 +36,7 @@ public class ProfileController {
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<LoginResponse>> getCurrentUser(Authentication authentication) {
         User user = getUserFromAuth(authentication);
-        LoginResponse response = new LoginResponse(user.getId(), user.getEmail(), user.getName(), user.getRole());
+        LoginResponse response = new LoginResponse(user.getId(), user.getEmail(), user.getName(), user.getRole(), user.getProfessionalVerificationStatus());
         return ResponseEntity.ok(ApiResponse.success(response, "Session valid"));
     }
     
@@ -80,6 +80,24 @@ public class ProfileController {
         String userId = getUserFromAuth(authentication).getId();
         ProfileResponse updatedProfile = profileService.simpleUpdateProfile(userId, request);
         return ResponseEntity.ok(ApiResponse.success(updatedProfile, "Profile updated successfully"));
+    }
+    
+    @GetMapping("/me/verification-status")
+    public ResponseEntity<ApiResponse<com.medsyncpro.dto.VerificationStatusResponse>> getVerificationStatus(Authentication authentication) {
+        String userId = getUserFromAuth(authentication).getId();
+        com.medsyncpro.dto.VerificationStatusResponse status = profileService.getVerificationStatus(userId);
+        return ResponseEntity.ok(ApiResponse.success(status, "Verification status retrieved"));
+    }
+    
+    @PostMapping(value = "/me/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<com.medsyncpro.dto.VerificationStatusResponse>> uploadDocuments(
+            Authentication authentication,
+            @RequestPart("documents") List<MultipartFile> documents,
+            @RequestParam Map<String, String> documentTypes) {
+        
+        String userId = getUserFromAuth(authentication).getId();
+        com.medsyncpro.dto.VerificationStatusResponse status = profileService.uploadVerificationDocuments(userId, documents, documentTypes);
+        return ResponseEntity.ok(ApiResponse.success(status, "Documents uploaded successfully"));
     }
     
     private User getUserFromAuth(Authentication authentication) {

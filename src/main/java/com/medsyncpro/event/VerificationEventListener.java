@@ -1,0 +1,89 @@
+package com.medsyncpro.event;
+
+import com.medsyncpro.entity.Notification;
+import com.medsyncpro.entity.Role;
+import com.medsyncpro.entity.User;
+import com.medsyncpro.repository.NotificationRepository;
+import com.medsyncpro.repository.UserRepository;
+import com.medsyncpro.service.FirebasePushService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class VerificationEventListener {
+
+    private final UserRepository userRepository;
+    private final NotificationRepository notificationRepository;
+    private final FirebasePushService firebasePushService;
+
+    @Async
+    @EventListener
+    @Transactional
+    public void onDocumentSubmitted(DocumentSubmittedEvent event) {
+        User user = event.getUser();
+        String title = "New Document Submission";
+        String message = "User " + user.getName() + " (" + user.getEmail() + ") has submitted verification documents.";
+
+        log.info("Handling DocumentSubmittedEvent for user: {}", user.getEmail());
+
+        // Notify all admins
+        List<User> admins = userRepository.findByRoleAndDeletedFalse(Role.ADMIN, org.springframework.data.domain.Pageable.unpaged()).getContent();
+        
+        for (User admin : admins) {
+            // Save notification in DB
+            Notification notification = new Notification();
+            notification.setTitle(title);
+            notification.setMessage(message);
+            notification.setType("VERIFICATION_REQUEST");
+            notification.setRecipientId(admin.getId());
+            notification.setIsRead(false);
+            notification.setCreatedAt(LocalDateTime.now());
+            notificationRepository.save(notification);
+
+            // Send Push Notification if Admin has an FCM Token
+            if (admin.getFcmToken() != null && !admin.getFcmToken().isBlank()) {
+                firebasePushService.sendPushNotification(admin.getFcmToken(), title, message);
+            }
+        }
+    }
+
+    @Async
+    @EventListener
+    @Transactional
+    public void onVerificationDecision(VerificationDecisionEvent event) {
+        User user = event.getUser();
+        String status = event.getDecision().name();
+        String title = "Verification Update";
+        String message = "Your professional verification status is now: " + status;
+        
+        if (event.getComments() != null && !event.getComments().isBlank()) {
+            message += ". Notes: " + event.getComments();
+        }
+
+        log.info("Handling VerificationDecisionEvent for user: {} to status: {}", user.getEmail(), status);
+
+        // Save notification in DB
+        Notification notification = new Notification();
+        notification.setTitle(title);
+        notification.setMessage(message);
+        notification.setType("VERIFICATION_DECISION");
+        notification.setRecipientId(user.getId());
+        notification.setIsRead(false);
+        notification.setCreatedAt(LocalDateTime.now());
+        notificationRepository.save(notification);
+
+        // Send Push Notification if User has an FCM Token
+        if (user.getFcmToken() != null && !user.getFcmToken().isBlank()) {
+            firebasePushService.sendPushNotification(user.getFcmToken(), title, message);
+        }
+    }
+}

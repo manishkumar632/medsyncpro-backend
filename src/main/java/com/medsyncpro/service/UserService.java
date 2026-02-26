@@ -15,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
+import org.springframework.context.ApplicationEventPublisher;
+
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -22,6 +24,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final VerificationService verificationService;
+    private final ApplicationEventPublisher eventPublisher;
     
     @Value("${admin.secret:}")
     private String adminSecret;
@@ -65,14 +68,19 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(request.getRole());
         
-        // All users start as not approved until email verified
-        user.setApproved(false);
+        // All users default unverified professional status
+        user.setProfessionalVerificationStatus(com.medsyncpro.entity.VerificationStatus.UNVERIFIED);
         
         try {
             user = userRepository.save(user);
             
             // Generate and send verification token
             verificationService.generateAndSendToken(user);
+            
+            // Trigger verification workflow for DOCTOR and PHARMACIST
+            if (user.getRole() == Role.DOCTOR || user.getRole() == Role.PHARMACIST) {
+                eventPublisher.publishEvent(new com.medsyncpro.event.UserSignupEvent(this, user));
+            }
             
             return user;
         } catch (DataIntegrityViolationException e) {
@@ -91,11 +99,7 @@ public class UserService {
             throw new BusinessException("EMAIL_NOT_VERIFIED", "Please verify your email before logging in");
         }
         
-        if (!user.getApproved()) {
-            throw new BusinessException("ACCOUNT_PENDING", "Account pending approval");
-        }
-        
-        return new com.medsyncpro.dto.LoginResponse(user.getId(), user.getEmail(), user.getName(), user.getRole());
+        return new com.medsyncpro.dto.LoginResponse(user.getId(), user.getEmail(), user.getName(), user.getRole(), user.getProfessionalVerificationStatus());
     }
     
     public String generateToken(User user) {

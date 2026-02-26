@@ -37,9 +37,6 @@ public class User {
     private Role role;
     
     @Column(nullable = false)
-    private Boolean approved = false;
-    
-    @Column(nullable = false)
     private Boolean emailVerified = false;
     
     @Column(nullable = false)
@@ -68,6 +65,13 @@ public class User {
 
     @Column(length = 10)
     private String bloodGroup;
+
+    @Column(length = 255)
+    private String fcmToken;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private VerificationStatus professionalVerificationStatus = VerificationStatus.UNVERIFIED;
 
     @Column(nullable = false)
     private Integer tokenVersion = 0;

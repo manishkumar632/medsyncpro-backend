@@ -9,9 +9,17 @@ import com.medsyncpro.exception.BusinessException;
 import com.medsyncpro.exception.ResourceNotFoundException;
 import com.medsyncpro.mapper.ProfileMapper;
 import com.medsyncpro.repository.DocumentRepository;
+import com.medsyncpro.entity.User;
+import com.medsyncpro.entity.VerificationRequest;
+import com.medsyncpro.exception.BusinessException;
+import com.medsyncpro.exception.ResourceNotFoundException;
+import com.medsyncpro.mapper.ProfileMapper;
+import com.medsyncpro.repository.DocumentRepository;
 import com.medsyncpro.repository.UserRepository;
+import com.medsyncpro.repository.VerificationRequestRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -30,7 +38,9 @@ public class ProfileService {
     
     private final UserRepository userRepository;
     private final DocumentRepository documentRepository;
+    private final VerificationRequestRepository verificationRequestRepository;
     private final FileStorageService fileStorageService;
+    private final ApplicationEventPublisher eventPublisher;
     private final ProfileMapper profileMapper;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
     
@@ -126,6 +136,64 @@ public class ProfileService {
         List<Document> documents = documentRepository.findByUserId(userId);
         log.info("Profile updated (JSON) for user: {}", userId);
         return profileMapper.toProfileResponse(user, documents);
+    }
+    
+    @Transactional(readOnly = true)
+    public com.medsyncpro.dto.VerificationStatusResponse getVerificationStatus(String userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        VerificationRequest request = verificationRequestRepository.findByUserId(userId).orElse(null);
+        String comments = request != null ? request.getComments() : null;
+        
+        List<Document> documents = documentRepository.findByUserId(userId);
+        List<com.medsyncpro.dto.DocumentResponse> documentResponses = documents.stream()
+                .map(profileMapper::toDocumentResponse)
+                .collect(java.util.stream.Collectors.toList());
+                
+        return com.medsyncpro.dto.VerificationStatusResponse.builder()
+                .status(user.getProfessionalVerificationStatus())
+                .submittedDocuments(documentResponses)
+                .verificationNotes(comments)
+                .build();
+    }
+    
+    @Transactional
+    public com.medsyncpro.dto.VerificationStatusResponse uploadVerificationDocuments(
+            String userId, 
+            List<MultipartFile> documents, 
+            Map<String, String> documentTypes) {
+            
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+                
+        List<String> uploadedUrls = new ArrayList<>();
+        
+        try {
+            if (documents != null && !documents.isEmpty()) {
+                handleDocumentUploads(user, documents, documentTypes, uploadedUrls);
+            }
+            
+            user.setProfessionalVerificationStatus(com.medsyncpro.entity.VerificationStatus.DOCUMENT_SUBMITTED);
+            user = userRepository.save(user);
+            
+            VerificationRequest request = verificationRequestRepository.findByUserId(userId).orElse(null);
+            if (request == null) {
+                request = new VerificationRequest();
+                request.setUser(user);
+            }
+            request.setStatus(com.medsyncpro.entity.VerificationStatus.DOCUMENT_SUBMITTED);
+            verificationRequestRepository.save(request);
+            
+            // Publish Event to notify admins
+            eventPublisher.publishEvent(new com.medsyncpro.event.DocumentSubmittedEvent(this, user));
+            
+        } catch (Exception e) {
+            rollbackFileUploads(uploadedUrls);
+            throw e;
+        }
+        
+        return getVerificationStatus(userId);
     }
     
     private UpdateProfileRequest parseProfileRequest(String profileJson) {
