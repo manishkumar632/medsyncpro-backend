@@ -38,3 +38,5 @@ application-dev.properties
 *.json
 !package.json
 !tsconfig.json
+.env
+env.properties

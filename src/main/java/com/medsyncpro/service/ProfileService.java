@@ -32,7 +32,7 @@ public class ProfileService {
     private final DocumentRepository documentRepository;
     private final FileStorageService fileStorageService;
     private final ProfileMapper profileMapper;
-    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
     
     @Transactional
     public ProfileResponse updateProfile(
