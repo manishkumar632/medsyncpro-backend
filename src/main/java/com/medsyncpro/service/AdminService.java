@@ -63,10 +63,13 @@ public class AdminService {
         
         boolean hasSearch = search != null && !search.trim().isEmpty();
         
-        if (approved != null && hasSearch) {
-            userPage = userRepository.findByRoleAndApprovedAndSearch(role, approved, search.trim(), pageable);
-        } else if (approved != null) {
-            userPage = userRepository.findByRoleAndApproved(role, approved, pageable);
+        if (approved != null) {
+            VerificationStatus status = approved ? VerificationStatus.VERIFIED : VerificationStatus.UNVERIFIED;
+            if (hasSearch) {
+                userPage = userRepository.findByRoleAndVerificationStatusAndSearch(role, status, search.trim(), pageable);
+            } else {
+                userPage = userRepository.findByRoleAndVerificationStatus(role, status, pageable);
+            }
         } else if (hasSearch) {
             userPage = userRepository.findByRoleAndSearch(role, search.trim(), pageable);
         } else {

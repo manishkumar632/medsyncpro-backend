@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import com.medsyncpro.entity.VerificationStatus;
 
 public interface UserRepository extends JpaRepository<User, String> {
     boolean existsByEmail(String email);
@@ -23,7 +24,7 @@ public interface UserRepository extends JpaRepository<User, String> {
     
     long countByRoleAndDeletedFalse(Role role);
     
-    @Query("SELECT COUNT(u) FROM User u WHERE u.emailVerified = true AND u.approved = false AND u.deleted = false AND u.role <> com.medsyncpro.entity.Role.ADMIN")
+    @Query("SELECT COUNT(u) FROM User u WHERE u.emailVerified = true AND u.professionalVerificationStatus IN (com.medsyncpro.entity.VerificationStatus.PENDING, com.medsyncpro.entity.VerificationStatus.DOCUMENT_SUBMITTED) AND u.deleted = false AND u.role <> com.medsyncpro.entity.Role.ADMIN")
     long countPendingApprovals();
     
     // ── Admin user listing queries ──
@@ -35,15 +36,15 @@ public interface UserRepository extends JpaRepository<User, String> {
            "AND (LOWER(u.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<User> findByRoleAndSearch(@Param("role") Role role, @Param("search") String search, Pageable pageable);
     
-    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.role = :role AND u.approved = :approved")
-    Page<User> findByRoleAndApproved(@Param("role") Role role, @Param("approved") Boolean approved, Pageable pageable);
+    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.role = :role AND u.professionalVerificationStatus = :status")
+    Page<User> findByRoleAndVerificationStatus(@Param("role") Role role, @Param("status") VerificationStatus status, Pageable pageable);
     
-    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.role = :role AND u.approved = :approved " +
+    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.role = :role AND u.professionalVerificationStatus = :status " +
            "AND (LOWER(u.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')))")
-    Page<User> findByRoleAndApprovedAndSearch(@Param("role") Role role, @Param("approved") Boolean approved, @Param("search") String search, Pageable pageable);
+    Page<User> findByRoleAndVerificationStatusAndSearch(@Param("role") Role role, @Param("status") VerificationStatus status, @Param("search") String search, Pageable pageable);
     
     // Pending approvals list (email verified but not approved, non-admin)
-    @Query("SELECT u FROM User u WHERE u.emailVerified = true AND u.approved = false AND u.deleted = false AND u.role <> com.medsyncpro.entity.Role.ADMIN")
+    @Query("SELECT u FROM User u WHERE u.emailVerified = true AND u.professionalVerificationStatus IN (com.medsyncpro.entity.VerificationStatus.PENDING, com.medsyncpro.entity.VerificationStatus.DOCUMENT_SUBMITTED) AND u.deleted = false AND u.role <> com.medsyncpro.entity.Role.ADMIN")
     List<User> findPendingApprovals();
 }
 
