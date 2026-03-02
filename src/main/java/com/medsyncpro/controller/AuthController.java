@@ -8,6 +8,7 @@ import com.medsyncpro.entity.User;
 import com.medsyncpro.exception.BusinessException;
 import com.medsyncpro.response.ApiResponse;
 import com.medsyncpro.service.*;
+import com.medsyncpro.utils.Utils;
 
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.Cookie;
@@ -23,6 +24,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
 
 @RestController
 @RequestMapping("/api/auth")
@@ -34,12 +38,20 @@ public class AuthController {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final TokenBlacklistService tokenBlacklistService;
+    private final Utils utils;
     
     @Value("${jwt.access-expiration:900000}")
     private long accessExpiration;
     
     @Value("${jwt.refresh-expiration:604800000}")
     private long refreshExpiration;
+
+    // ====================== ME ========================
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<User>> getCurrentUser(Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(utils.getUserFromAuth(authentication), "Session Valid"));
+    }
+
     
     // ==================== REGISTER ====================
     

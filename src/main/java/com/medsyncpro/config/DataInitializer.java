@@ -25,7 +25,7 @@ public class DataInitializer implements CommandLineRunner {
             User admin = new User();
             admin.setName("Super Admin");
             admin.setEmail(adminEmail);
-            admin.setPassword(passwordEncoder.encode("#aDmin@365.9860_"));
+            admin.setPassword(passwordEncoder.encode("Admin@123"));
             admin.setRole(Role.ADMIN);
             admin.setProfessionalVerificationStatus(com.medsyncpro.entity.VerificationStatus.VERIFIED);
             admin.setEmailVerified(true);

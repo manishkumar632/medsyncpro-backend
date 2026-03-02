@@ -1,7 +1,6 @@
 package com.medsyncpro.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medsyncpro.dto.doctor.*;
 import com.medsyncpro.entity.DoctorClinic;
 import com.medsyncpro.entity.DoctorSettings;
