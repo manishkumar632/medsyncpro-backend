@@ -18,14 +18,16 @@ public class Utils {
         if (authentication == null || authentication.getPrincipal() == null) {
             throw new BusinessException("UNAUTHORIZED", "User not authenticated");
         }
-        
+
         String email = authentication.getName();
         User user = userRepository.findByEmail(email);
-        
+
         if (user == null) {
             throw new BusinessException("USER_NOT_FOUND", "User not found");
         }
-        
+
         return user;
     }
+    
+    
 }

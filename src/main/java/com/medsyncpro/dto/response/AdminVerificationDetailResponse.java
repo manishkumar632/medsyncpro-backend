@@ -1,4 +1,4 @@
-package com.medsyncpro.dto;
+package com.medsyncpro.dto.response;
 
 import com.medsyncpro.entity.VerificationStatus;
 import lombok.AllArgsConstructor;

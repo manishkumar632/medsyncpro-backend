@@ -1,4 +1,4 @@
-package com.medsyncpro.dto;
+package com.medsyncpro.dto.request;
 
 import com.medsyncpro.entity.Role;
 import jakarta.validation.constraints.*;

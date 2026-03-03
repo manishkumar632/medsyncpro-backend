@@ -1,0 +1,20 @@
+﻿[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< com.medsyncpro:medsyncpro >----------------------
+[INFO] Building medsyncpro 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ medsyncpro ---
+[INFO] Copying 2 resources from src\main\resources to target\classes
+[INFO] Copying 0 resource from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ medsyncpro ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 102 source files with javac [debug parameters release 21] to target\classes
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  6.698 s
+[INFO] Finished at: 2026-03-03T12:52:19+05:30
+[INFO] ------------------------------------------------------------------------

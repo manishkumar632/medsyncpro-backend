@@ -1,6 +1,5 @@
-package com.medsyncpro.dto;
+package com.medsyncpro.dto.response;
 
-import com.medsyncpro.entity.DocumentType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -11,7 +10,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RequiredDocumentItem {
-    private DocumentType type;
+    private Long documentTypeId;
+    private String typeCode;
     private String label;
     private boolean required;
     private boolean uploaded;

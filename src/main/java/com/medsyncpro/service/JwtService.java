@@ -8,6 +8,7 @@ import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+
 import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.UUID;
@@ -29,7 +30,6 @@ public class JwtService {
                 .id(UUID.randomUUID().toString())
                 .subject(user.getEmail())
                 .claim("role", user.getRole().name())
-                .claim("name", user.getName())
                 .claim("userId", user.getId())
                 .claim("tokenVersion", user.getTokenVersion())
                 .claim("deviceInfo", deviceInfo)
@@ -37,14 +37,6 @@ public class JwtService {
                 .expiration(new Date(System.currentTimeMillis() + accessExpiration))
                 .signWith(getSigningKey())
                 .compact();
-    }
-    
-    /**
-     * @deprecated Use generateAccessToken instead
-     */
-    @Deprecated
-    public String generateToken(User user) {
-        return generateAccessToken(user, "unknown");
     }
     
     /**

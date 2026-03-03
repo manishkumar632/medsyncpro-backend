@@ -1,27 +1,35 @@
 package com.medsyncpro.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import java.util.UUID;
+
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "doctor_settings", indexes = {
     @Index(name = "idx_ds_user_id", columnList = "userId", unique = true)
 })
-@Data
-public class DoctorSettings {
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@SQLDelete(sql = "UPDATE doctor_settings SET deleted = true WHERE id=?")
+@SQLRestriction("deleted = false")
+public class DoctorSettings extends BaseEntity {
     @Id
-    @Column(length = 36, updatable = false, nullable = false)
-    private String id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
-    @PrePersist
-    public void generateId() {
-        if (this.id == null) this.id = UUID.randomUUID().toString();
-    }
-
-    @Column(nullable = false, unique = true, length = 36)
-    private String userId;
+    @OneToOne
+    @JoinColumn(name = "user_id", nullable = false, unique = true)
+    private User user;
 
     // ── Professional Info ──
     @Column(length = 100)
@@ -42,21 +50,27 @@ public class DoctorSettings {
     private String expertise; // JSON array: ["Cardiac Surgery"]
 
     // ── Consultation Settings ──
+    @Builder.Default
     @Column(nullable = false)
     private Integer slotDurationMinutes = 30;
 
+    @Builder.Default
     @Column(nullable = false)
     private Integer followUpWindowDays = 7;
 
+    @Builder.Default
     @Column(length = 100)
     private String prescriptionTemplate = "Default Template";
 
+    @Builder.Default
     @Column(nullable = false)
     private Boolean autoApproveAppointments = true;
 
+    @Builder.Default
     @Column(nullable = false)
     private Boolean onlineConsultationEnabled = true;
 
+    @Builder.Default
     @Column(nullable = false)
     private Boolean availableForConsultation = true;
 
@@ -73,12 +87,7 @@ public class DoctorSettings {
     private String weeklySchedule;
 
     // ── Security ──
+    @Builder.Default
     @Column(nullable = false)
     private Boolean twoFactorEnabled = false;
-
-    // ── Timestamps ──
-    @Column(nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
-
-    private LocalDateTime updatedAt;
 }

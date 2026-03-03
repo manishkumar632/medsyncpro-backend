@@ -7,21 +7,15 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
-public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
+public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID> {
 
-    Optional<RefreshToken> findByTokenAndRevokedFalse(String token);
+    Optional<RefreshToken> findByTokenHashAndRevokedFalse(String tokenHash);
 
-    @Modifying
-    @Query("UPDATE RefreshToken rt SET rt.revoked = true WHERE rt.user = ?1 AND rt.deviceInfo = ?2 AND rt.revoked = false")
-    int revokeByUserAndDevice(User user, String deviceInfo);
+    List<RefreshToken> findByUserAndRevokedFalse(User user);
 
-    @Modifying
-    @Query("UPDATE RefreshToken rt SET rt.revoked = true WHERE rt.user = ?1 AND rt.revoked = false")
-    int revokeAllByUser(User user);
-
-    @Modifying
-    @Query("DELETE FROM RefreshToken rt WHERE rt.expiryDate < ?1")
-    int deleteAllExpiredBefore(Instant now);
+    void deleteByUser(User user);
 }

@@ -1,6 +1,8 @@
 package com.medsyncpro.service;
 
-import com.medsyncpro.dto.RegisterRequest;
+import com.medsyncpro.dto.request.LoginRequest;
+import com.medsyncpro.dto.request.RegisterRequest;
+import com.medsyncpro.dto.response.LoginResponse;
 import com.medsyncpro.entity.Role;
 import com.medsyncpro.entity.User;
 import com.medsyncpro.exception.BusinessException;
@@ -62,14 +64,14 @@ public class UserService {
             throw new BusinessException("EMAIL_EXISTS", "User with the email already exist. Please login");
         }
         
-        User user = new User();
-        user.setName(request.getName());
-        user.setEmail(request.getEmail());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(request.getRole());
-        
-        // All users default unverified professional status
-        user.setProfessionalVerificationStatus(com.medsyncpro.entity.VerificationStatus.UNVERIFIED);
+        User user = User.builder()
+                .email(request.getEmail())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .role(request.getRole())
+                .emailVerified(false)
+                .phoneVerified(false)
+                .termsAccepted(true)
+                .build();
         
         try {
             user = userRepository.save(user);
@@ -78,7 +80,7 @@ public class UserService {
             verificationService.generateAndSendToken(user);
             
             // Trigger verification workflow for DOCTOR and PHARMACIST
-            if (user.getRole() == Role.DOCTOR || user.getRole() == Role.PHARMACIST) {
+            if (user.getRole() == Role.DOCTOR || user.getRole() == Role.PHARMACY) {
                 eventPublisher.publishEvent(new com.medsyncpro.event.UserSignupEvent(this, user));
             }
             
@@ -88,18 +90,25 @@ public class UserService {
         }
     }
     
-    public com.medsyncpro.dto.LoginResponse login(com.medsyncpro.dto.LoginRequest request) {
+    public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail());
         
         if (user == null || user.getDeleted() || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new BadCredentialsException("Invalid credentials");
         }
         
-        if (!user.getEmailVerified()) {
+        if (!user.isEmailVerified()) {
             throw new BusinessException("EMAIL_NOT_VERIFIED", "Please verify your email before logging in");
         }
         
-        return new com.medsyncpro.dto.LoginResponse(user.getId(), user.getEmail(), user.getName(), user.getRole(), user.getProfessionalVerificationStatus());
+        return LoginResponse.builder()
+                .email(user.getEmail())
+                .role(user.getRole())
+                .emailVerified(user.isEmailVerified())
+                .phoneVerified(user.isPhoneVerified())
+                .phone(user.getPhone())
+                .termsAccepted(user.isTermsAccepted())
+                .build();
     }
     
     public String generateToken(User user) {

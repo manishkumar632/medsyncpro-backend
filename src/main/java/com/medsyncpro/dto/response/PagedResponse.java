@@ -1,4 +1,4 @@
-package com.medsyncpro.dto;
+package com.medsyncpro.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

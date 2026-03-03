@@ -1,10 +1,12 @@
 package com.medsyncpro.response;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
+@Builder
 @AllArgsConstructor
 @NoArgsConstructor
 public class ApiResponse<T> {
@@ -13,6 +15,7 @@ public class ApiResponse<T> {
     private T data;
     private Object errors;
     
+
     public static <T> ApiResponse<T> success(T data, String message) {
         return new ApiResponse<>(true, message, data, null);
     }

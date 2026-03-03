@@ -6,95 +6,117 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
 public class SseEmitterService {
 
-    private static final long SSE_TIMEOUT = 5 * 60 * 1000L; // 5 minutes
+    // 30 minutes timeout (can be 0L for no timeout)
+    private static final long SSE_TIMEOUT = 30 * 60 * 1000L;
 
-    // userId → SseEmitter
-    private final Map<String, SseEmitter> emitters = new ConcurrentHashMap<>();
+    // userId → emitter
+    private final Map<UUID, SseEmitter> emitters = new ConcurrentHashMap<>();
 
-    // Track admin user IDs for broadcast
-    private final Map<String, Boolean> adminUserIds = new ConcurrentHashMap<>();
+    // track admin users
+    private final Set<UUID> adminUserIds = ConcurrentHashMap.newKeySet();
 
-    public SseEmitter addEmitter(String userId, boolean isAdmin) {
-        // Remove existing emitter if any
+    /**
+     * Register new emitter
+     */
+    public SseEmitter addEmitter(UUID userId, boolean isAdmin) {
+
+        // Remove old emitter if exists
         removeEmitter(userId);
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
 
-        emitter.onCompletion(() -> {
-            log.debug("SSE emitter completed for user: {}", userId);
-            emitters.remove(userId);
-            adminUserIds.remove(userId);
-        });
-
-        emitter.onTimeout(() -> {
-            log.debug("SSE emitter timed out for user: {}", userId);
-            emitters.remove(userId);
-            adminUserIds.remove(userId);
-        });
-
+        // Lifecycle callbacks
+        emitter.onCompletion(() -> cleanup(userId));
+        emitter.onTimeout(() -> cleanup(userId));
         emitter.onError(e -> {
-            log.debug("SSE emitter error for user: {}", userId);
-            emitters.remove(userId);
-            adminUserIds.remove(userId);
+            log.warn("SSE error for user: {}", userId, e);
+            cleanup(userId);
         });
 
         emitters.put(userId, emitter);
+
         if (isAdmin) {
-            adminUserIds.put(userId, true);
+            adminUserIds.add(userId);
         }
 
-        // Send initial heartbeat
+        // Initial handshake event
         try {
             emitter.send(SseEmitter.event()
                     .name("connected")
-                    .data("{\"message\":\"SSE connection established\"}"));
+                    .data("SSE connection established"));
         } catch (IOException e) {
             log.warn("Failed to send initial SSE event to user: {}", userId);
-            emitters.remove(userId);
-            adminUserIds.remove(userId);
+            cleanup(userId);
         }
 
-        log.info("SSE emitter added for user: {} (admin: {})", userId, isAdmin);
+        log.info("SSE connected: {} (admin: {})", userId, isAdmin);
         return emitter;
     }
 
-    public void sendToUser(String userId, String eventName, Object data) {
+    /**
+     * Send event to single user
+     */
+    public void sendToUser(UUID userId, String eventName, Object data) {
+
         SseEmitter emitter = emitters.get(userId);
-        if (emitter != null) {
-            try {
-                emitter.send(SseEmitter.event()
-                        .name(eventName)
-                        .data(data));
-                log.debug("SSE event '{}' sent to user: {}", eventName, userId);
-            } catch (IOException e) {
-                log.warn("Failed to send SSE event to user: {}", userId);
-                emitters.remove(userId);
-                adminUserIds.remove(userId);
-            }
+
+        if (emitter == null) {
+            return;
+        }
+
+        try {
+            emitter.send(SseEmitter.event()
+                    .name(eventName)
+                    .data(data));
+        } catch (IOException e) {
+            log.warn("Failed to send SSE to user: {}", userId);
+            emitter.completeWithError(e);
+            cleanup(userId);
         }
     }
 
+    /**
+     * Broadcast event to all admins
+     */
     public void sendToAdmins(String eventName, Object data) {
-        for (String adminId : adminUserIds.keySet()) {
+
+        for (UUID adminId : adminUserIds) {
             sendToUser(adminId, eventName, data);
         }
     }
 
-    public void removeEmitter(String userId) {
+    /**
+     * Remove emitter manually
+     */
+    public void removeEmitter(UUID userId) {
+
         SseEmitter emitter = emitters.remove(userId);
         adminUserIds.remove(userId);
+
         if (emitter != null) {
             try {
                 emitter.complete();
-            } catch (Exception e) {
-                // Already completed or errored
+            } catch (Exception ignored) {
             }
         }
+
+        log.debug("SSE removed: {}", userId);
+    }
+
+    /**
+     * Internal cleanup method
+     */
+    private void cleanup(UUID userId) {
+        emitters.remove(userId);
+        adminUserIds.remove(userId);
+        log.debug("SSE cleaned up: {}", userId);
     }
 }

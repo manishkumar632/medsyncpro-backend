@@ -9,8 +9,18 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface VerificationRequestRepository extends JpaRepository<VerificationRequest, String> {
-    List<VerificationRequest> findByStatusOrderByCreatedAtDesc(VerificationStatus status);
+public interface VerificationRequestRepository
+        extends JpaRepository<VerificationRequest, String> {
+
+    // Single status
+    List<VerificationRequest> findByStatusOrderByCreatedAtDesc(
+            VerificationStatus status);
+
+    // Multiple statuses (IN query) ✅ ADD THIS
+    List<VerificationRequest> findByStatusInOrderByCreatedAtDesc(
+            List<VerificationStatus> statuses);
+
     List<VerificationRequest> findAllByOrderByCreatedAtDesc();
+
     Optional<VerificationRequest> findByUserId(String userId);
 }

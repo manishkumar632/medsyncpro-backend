@@ -1,8 +1,8 @@
 package com.medsyncpro.controller;
 
-import com.medsyncpro.dto.LoginRequest;
-import com.medsyncpro.dto.LoginResponse;
-import com.medsyncpro.dto.RegisterRequest;
+import com.medsyncpro.dto.request.LoginRequest;
+import com.medsyncpro.dto.request.RegisterRequest;
+import com.medsyncpro.dto.response.LoginResponse;
 import com.medsyncpro.entity.RefreshToken;
 import com.medsyncpro.entity.User;
 import com.medsyncpro.exception.BusinessException;
@@ -24,8 +24,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 
 
 @RestController
@@ -39,6 +37,7 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final TokenBlacklistService tokenBlacklistService;
     private final Utils utils;
+    private final AuthService authService;
     
     @Value("${jwt.access-expiration:900000}")
     private long accessExpiration;
@@ -70,58 +69,55 @@ public class AuthController {
             HttpServletRequest httpRequest,
             HttpServletResponse response) {
         
-        LoginResponse loginResponse = userService.login(request);
-        User user = userService.getUserByEmail(request.getEmail());
-        String deviceInfo = extractDeviceInfo(httpRequest);
+        ApiResponse<LoginResponse> loginResponse = authService.login(request, httpRequest, response);
         
-        // Generate access token (short-lived, 15 min)
-        String accessToken = jwtService.generateAccessToken(user, deviceInfo);
-        
-        // Generate refresh token (long-lived, 7 days)
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user, deviceInfo);
-        
-        // Set cookies
-        addAccessTokenCookie(response, accessToken);
-        addRefreshTokenCookie(response, refreshToken.getToken());
-        
-        log.info("User {} logged in from device: {}", user.getEmail(), deviceInfo);
-        return ResponseEntity.ok(ApiResponse.success(loginResponse, "Login successful"));
+        log.info("User {} logged in from device: {}", loginResponse.getData());
+        return ResponseEntity.ok(loginResponse);
     }
     
     // ==================== REFRESH TOKEN ====================
     
     @PostMapping("/refresh")
-    public ResponseEntity<ApiResponse<LoginResponse>> refreshToken(
-            HttpServletRequest request,
-            HttpServletResponse response) {
-        
-        // 1. Extract refresh token from cookie
-        String refreshTokenStr = extractCookieValue(request, "refresh_token");
-        if (refreshTokenStr == null) {
-            throw new BusinessException("MISSING_REFRESH_TOKEN", "Refresh token cookie is missing. Please login again");
-        }
-        
-        // 2. Verify refresh token
-        RefreshToken refreshToken = refreshTokenService.verifyRefreshToken(refreshTokenStr);
-        User user = refreshToken.getUser();
-        String deviceInfo = refreshToken.getDeviceInfo();
-        
-        // 3. Rotate refresh token (revoke old, create new)
-        RefreshToken newRefreshToken = refreshTokenService.rotateRefreshToken(refreshToken);
-        
-        // 4. Generate new access token
-        String newAccessToken = jwtService.generateAccessToken(user, deviceInfo);
-        
-        // 5. Set new cookies
-        addAccessTokenCookie(response, newAccessToken);
-        addRefreshTokenCookie(response, newRefreshToken.getToken());
-        
-        LoginResponse loginResponse = new LoginResponse(
-                user.getId(), user.getEmail(), user.getName(), user.getRole(), user.getProfessionalVerificationStatus());
-        
-        log.info("Token refreshed for user {} on device {}", user.getEmail(), deviceInfo);
-        return ResponseEntity.ok(ApiResponse.success(loginResponse, "Token refreshed successfully"));
+public ResponseEntity<ApiResponse<LoginResponse>> refreshToken(
+        HttpServletRequest request,
+        HttpServletResponse response) {
+
+    String refreshTokenStr = extractCookieValue(request, "refresh_token");
+
+    if (refreshTokenStr == null) {
+        throw new BusinessException(
+                "MISSING_REFRESH_TOKEN",
+                "Refresh token cookie is missing. Please login again");
     }
+
+    // Validate & rotate (this revokes old token internally)
+    User user = refreshTokenService.validateAndRotate(refreshTokenStr);
+
+    String deviceInfo = request.getHeader("User-Agent");
+
+    // Generate new access token
+    String newAccessToken =
+            jwtService.generateAccessToken(user, deviceInfo);
+
+    // Create new refresh token
+    String newRefreshToken =
+            refreshTokenService.createRefreshToken(user, deviceInfo);
+
+    // Set cookies
+    addAccessTokenCookie(response, newAccessToken);
+    addRefreshTokenCookie(response, newRefreshToken);
+
+    LoginResponse loginResponse = LoginResponse.builder()
+            .email(user.getEmail())
+            .role(user.getRole())
+            .emailVerified(user.isEmailVerified())
+            .phoneVerified(user.isPhoneVerified())
+            .phone(user.getPhone())
+            .build();
+
+    return ResponseEntity.ok(
+            ApiResponse.success(loginResponse, "Token refreshed successfully"));
+}
     
     // ==================== LOGOUT (Current Device) ====================
     
@@ -129,53 +125,36 @@ public class AuthController {
     public ResponseEntity<ApiResponse<Object>> logout(
             HttpServletRequest request,
             HttpServletResponse response) {
-        
+
         String accessToken = extractCookieValue(request, "access_token");
-        String refreshTokenStr = extractCookieValue(request, "refresh_token");
-        
-        // Blacklist access token if present (even if expired)
+        String refreshToken = extractCookieValue(request, "refresh_token");
+
+        // 1️⃣ Blacklist access token (if exists)
         if (accessToken != null) {
             try {
                 Claims claims = jwtService.extractClaimsAllowExpired(accessToken);
                 String jti = jwtService.extractJti(claims);
                 Instant expiry = jwtService.extractExpiration(claims).toInstant();
-                String email = jwtService.extractEmail(claims);
-                String deviceInfo = jwtService.extractDeviceInfo(claims);
-                
-                // Blacklist the access token
+
                 if (jti != null) {
                     tokenBlacklistService.blacklist(jti, expiry);
                 }
-                
-                // Revoke refresh token for this device
-                if (email != null && deviceInfo != null) {
-                    User user = userService.getUserByEmail(email);
-                    if (user != null) {
-                        refreshTokenService.revokeByDevice(user, deviceInfo);
-                    }
-                }
-                
-                log.info("User {} logged out from device {}", email, deviceInfo);
             } catch (Exception e) {
-                log.warn("Error processing access token during logout: {}", e.getMessage());
+                log.warn("Error blacklisting token: {}", e.getMessage());
             }
         }
-        
-        // Also try to revoke the refresh token directly
-        if (refreshTokenStr != null) {
-            try {
-                RefreshToken refreshToken = refreshTokenService.verifyRefreshToken(refreshTokenStr);
-                refreshTokenService.revokeByDevice(refreshToken.getUser(), refreshToken.getDeviceInfo());
-            } catch (Exception e) {
-                // Refresh token already revoked or expired — that's fine (idempotent)
-            }
+
+        // 2️⃣ Revoke refresh token
+        if (refreshToken != null) {
+            refreshTokenService.revokeToken(refreshToken);
         }
-        
-        // Always clear cookies (idempotent — works even if already logged out)
+
+        // 3️⃣ Clear cookies
         clearAccessTokenCookie(response);
         clearRefreshTokenCookie(response);
-        
-        return ResponseEntity.ok(ApiResponse.success(null, "Logged out successfully"));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(null, "Logged out successfully"));
     }
     
     // ==================== LOGOUT ALL DEVICES ====================
@@ -185,64 +164,54 @@ public class AuthController {
             Authentication authentication,
             HttpServletRequest request,
             HttpServletResponse response) {
-        
+
         String accessToken = extractCookieValue(request, "access_token");
-        
-        // Need to identify the user — try from Authentication first, then from token
+
         User user = null;
-        
+
         if (authentication != null && authentication.getName() != null) {
             user = userService.getUserByEmail(authentication.getName());
         }
-        
-        if (user == null && accessToken != null) {
-            try {
-                Claims claims = jwtService.extractClaimsAllowExpired(accessToken);
-                String email = jwtService.extractEmail(claims);
-                if (email != null) {
-                    user = userService.getUserByEmail(email);
-                }
-            } catch (Exception e) {
-                log.warn("Could not extract user from token: {}", e.getMessage());
-            }
-        }
-        
+
         if (user == null) {
-            throw new BusinessException("UNAUTHORIZED", "Unable to identify user. Please login again");
+            throw new BusinessException(
+                    "UNAUTHORIZED",
+                    "Unable to identify user. Please login again");
         }
-        
-        // 1. Blacklist current access token
+
+        // 1️⃣ Blacklist current access token
         if (accessToken != null) {
             try {
                 Claims claims = jwtService.extractClaimsAllowExpired(accessToken);
                 String jti = jwtService.extractJti(claims);
                 Instant expiry = jwtService.extractExpiration(claims).toInstant();
+
                 if (jti != null) {
                     tokenBlacklistService.blacklist(jti, expiry);
                 }
             } catch (Exception e) {
-                log.warn("Error blacklisting access token: {}", e.getMessage());
+                log.warn("Error blacklisting token: {}", e.getMessage());
             }
         }
-        
-        // 2. Revoke ALL refresh tokens
-        refreshTokenService.revokeAllForUser(user);
-        
-        // 3. Increment token version — instantly invalidates all access tokens
+
+        // 2️⃣ Revoke ALL refresh tokens
+        refreshTokenService.revokeAllUserTokens(user);
+
+        // 3️⃣ Increment token version → instantly invalidates all access tokens
         userService.incrementTokenVersion(user);
-        
-        // 4. Clear cookies on this device
+
+        // 4️⃣ Clear cookies
         clearAccessTokenCookie(response);
         clearRefreshTokenCookie(response);
-        
-        log.info("User {} logged out from ALL devices", user.getEmail());
-        return ResponseEntity.ok(ApiResponse.success(null, "Logged out from all devices successfully"));
+
+        return ResponseEntity.ok(
+                ApiResponse.success(null, "Logged out from all devices successfully"));
     }
     
     // ==================== EMAIL VERIFICATION ====================
     
     @PostMapping("/verify-email")
-    public ResponseEntity<ApiResponse<Object>> verifyEmail(@Valid @RequestBody com.medsyncpro.dto.VerifyEmailRequest request) {
+    public ResponseEntity<ApiResponse<Object>> verifyEmail(@Valid @RequestBody com.medsyncpro.dto.request.VerifyEmailRequest request) {
         verificationService.verifyEmail(request.getToken());
         return ResponseEntity.ok(ApiResponse.success(null, "Email verified successfully"));
     }
@@ -254,11 +223,6 @@ public class AuthController {
     }
     
     // ==================== HELPERS ====================
-    
-    private String extractDeviceInfo(HttpServletRequest request) {
-        String userAgent = request.getHeader("User-Agent");
-        return userAgent != null ? userAgent : "Unknown Device";
-    }
     
     private String extractCookieValue(HttpServletRequest request, String cookieName) {
         if (request.getCookies() != null) {

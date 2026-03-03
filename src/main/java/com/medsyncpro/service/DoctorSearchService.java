@@ -2,24 +2,14 @@ package com.medsyncpro.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import com.medsyncpro.dto.doctor.DoctorPublicProfile;
-import com.medsyncpro.dto.doctor.DoctorSearchResult;
-import com.medsyncpro.entity.DoctorClinic;
-import com.medsyncpro.dto.doctor.ClinicResponse;
-import com.medsyncpro.entity.DoctorSettings;
-import com.medsyncpro.entity.Role;
-import com.medsyncpro.entity.User;
-import com.medsyncpro.entity.VerificationStatus;
+import com.medsyncpro.dto.doctor.*;
+import com.medsyncpro.entity.*;
 import com.medsyncpro.exception.ResourceNotFoundException;
-import com.medsyncpro.repository.DoctorClinicRepository;
-import com.medsyncpro.repository.DoctorSettingsRepository;
-import com.medsyncpro.repository.UserRepository;
+import com.medsyncpro.repository.*;
+import com.medsyncpro.utils.UserProfileHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,25 +22,21 @@ import java.util.stream.Collectors;
 public class DoctorSearchService {
 
     private final UserRepository userRepository;
+    private final UserProfileHelper userProfileHelper;
     private final DoctorSettingsRepository doctorSettingsRepository;
     private final DoctorClinicRepository doctorClinicRepository;
 
-    // Instantiated directly — avoids Spring bean injection ambiguity.
-    // ObjectMapper is not auto-registered as a bean in all Spring Boot configs.
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // ══════════════════════════════════════════════════════════════
-    // SEARCH — multi-field, paginated
+    // SEARCH DOCTORS
     // ══════════════════════════════════════════════════════════════
 
     @Transactional(readOnly = true)
     public Page<DoctorSearchResult> searchDoctors(String query, Pageable pageable) {
 
-        Page<User> doctorPage = (query == null || query.isBlank())
-                ? userRepository.findByRoleAndVerificationStatus(
-                        Role.DOCTOR, VerificationStatus.VERIFIED, pageable)
-                : userRepository.findVerifiedDoctorsBySearch(
-                        Role.DOCTOR, VerificationStatus.VERIFIED, query.trim(), pageable);
+        // Fetch all doctors (role-based)
+        Page<User> doctorPage = userRepository.findByRoleAndDeletedFalse(Role.DOCTOR, pageable);
 
         List<User> doctors = doctorPage.getContent();
 
@@ -58,75 +44,84 @@ public class DoctorSearchService {
             return Page.empty(pageable);
         }
 
-        List<String> doctorIds = doctors.stream().map(User::getId).collect(Collectors.toList());
-        Map<String, DoctorSettings> settingsMap = buildSettingsMap(doctorIds);
-        Map<String, List<DoctorClinic>> clinicsMap = buildClinicsMap(doctorIds);
+        List<UUID> doctorIds = doctors.stream().map(User::getId).collect(Collectors.toList());
+
+        Map<UUID, DoctorSettings> settingsMap = buildSettingsMap(doctorIds);
+        Map<UUID, List<DoctorClinic>> clinicsMap = buildClinicsMap(doctorIds);
 
         List<DoctorSearchResult> results = doctors.stream()
-                .filter(u -> !u.getDeleted())
+                // Only VERIFIED doctors
+                .filter(u -> userProfileHelper.getVerificationStatus(u) == VerificationStatus.VERIFIED)
+                // Only visible profiles
                 .filter(u -> isProfileVisible(settingsMap.get(u.getId())))
-                .filter(u -> matchesQuery(u, settingsMap.get(u.getId()),
-                        clinicsMap.get(u.getId()), query))
-                .map(u -> toSearchResult(u,
+                // Search filtering
+                .filter(u -> matchesQuery(
+                        u,
+                        settingsMap.get(u.getId()),
+                        clinicsMap.get(u.getId()),
+                        query))
+                .map(u -> toSearchResult(
+                        u,
                         settingsMap.get(u.getId()),
                         clinicsMap.getOrDefault(u.getId(), List.of())))
                 .collect(Collectors.toList());
 
-        return new PageImpl<>(results, pageable, doctorPage.getTotalElements());
+        return new PageImpl<>(results, pageable, results.size());
     }
 
     // ══════════════════════════════════════════════════════════════
-    // PUBLIC PROFILE — full detail for one doctor
+    // PUBLIC PROFILE
     // ══════════════════════════════════════════════════════════════
 
     @Transactional(readOnly = true)
     public DoctorPublicProfile getDoctorProfile(String doctorId) {
 
-        User doctor = userRepository.findById(doctorId)
+        User doctor = userRepository.findById(UUID.fromString(doctorId))
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor not found"));
 
-        if (doctor.getDeleted()) {
-            throw new ResourceNotFoundException("Doctor not found");
-        }
-        if (doctor.getRole() != Role.DOCTOR) {
+        if (doctor.getDeleted() || doctor.getRole() != Role.DOCTOR) {
             throw new ResourceNotFoundException("Doctor not found");
         }
 
-        DoctorSettings settings = doctorSettingsRepository
-                .findByUserId(doctorId)
+        if (userProfileHelper.getVerificationStatus(doctor) != VerificationStatus.VERIFIED) {
+            throw new ResourceNotFoundException("Doctor not found");
+        }
+
+        DoctorSettings settings = doctorSettingsRepository.findByUserId(doctor.getId())
                 .orElse(new DoctorSettings());
 
         if (!isProfileVisible(settings)) {
-            throw new ResourceNotFoundException("This doctor's profile is not publicly visible");
+            throw new ResourceNotFoundException("Profile not visible");
         }
 
         List<DoctorClinic> clinics = doctorClinicRepository
-                .findByUserIdOrderByIsPrimaryDescCreatedAtAsc(doctorId);
+                .findByUserIdOrderByIsPrimaryDescCreatedAtAsc(doctor.getId());
 
         boolean showContact = getPrivacyFlag(settings, "showContact", false);
-        Object weeklySchedule = parseWeeklySchedule(settings.getWeeklySchedule());
 
         return DoctorPublicProfile.builder()
-                .id(doctor.getId())
-                .name(doctor.getName())
+                .id(doctor.getId().toString())
+                .name(userProfileHelper.getName(doctor))
                 .email(showContact ? doctor.getEmail() : null)
                 .phone(showContact ? doctor.getPhone() : null)
-                .profileImageUrl(doctor.getProfileImageUrl())
-                .bio(doctor.getBio())
-                .gender(doctor.getGender() != null ? doctor.getGender().name() : null)
-                .city(doctor.getCity())
-                .state(doctor.getState())
-                .verificationStatus(doctor.getProfessionalVerificationStatus().name())
+                .profileImageUrl(userProfileHelper.getProfileImage(doctor))
+                .bio(userProfileHelper.getBio(doctor))
+                .gender(userProfileHelper.getGender(doctor) != null
+                        ? userProfileHelper.getGender(doctor).name()
+                        : null)
+                .city(userProfileHelper.getCity(doctor))
+                .state(userProfileHelper.getState(doctor))
+                .verificationStatus(
+                        userProfileHelper.getVerificationStatus(doctor).name())
                 .specialty(settings.getSpecialty())
                 .qualifications(settings.getQualifications())
-                .experienceYears(doctor.getExperienceYears())
-                .medRegNumber(settings.getMedRegNumber())
+                .experienceYears(userProfileHelper.getExperienceYears(doctor))
                 .consultationFee(settings.getConsultationFee())
                 .languages(parseJsonList(settings.getLanguages()))
                 .expertise(parseJsonList(settings.getExpertise()))
                 .clinics(clinics.stream()
                         .map(c -> ClinicResponse.builder()
-                                .id(c.getId())
+                                .id(String.valueOf(c.getId()))
                                 .clinicName(c.getClinicName())
                                 .address(c.getAddress())
                                 .city(c.getCity())
@@ -135,28 +130,30 @@ public class DoctorSearchService {
                         .collect(Collectors.toList()))
                 .availableForConsultation(settings.getAvailableForConsultation())
                 .onlineConsultationEnabled(settings.getOnlineConsultationEnabled())
-                .weeklySchedule(weeklySchedule)
                 .slotDurationMinutes(settings.getSlotDurationMinutes())
                 .autoApproveAppointments(settings.getAutoApproveAppointments())
                 .build();
     }
 
     // ══════════════════════════════════════════════════════════════
-    // PRIVATE HELPERS
+    // HELPERS
     // ══════════════════════════════════════════════════════════════
 
-    private Map<String, DoctorSettings> buildSettingsMap(List<String> doctorIds) {
-        Map<String, DoctorSettings> map = new HashMap<>();
-        for (String id : doctorIds) {
-            doctorSettingsRepository.findByUserId(id).ifPresent(s -> map.put(id, s));
+    private Map<UUID, DoctorSettings> buildSettingsMap(List<UUID> ids) {
+        Map<UUID, DoctorSettings> map = new HashMap<>();
+        for (UUID id : ids) {
+            doctorSettingsRepository.findByUserId(id)
+                    .ifPresent(s -> map.put(id, s));
         }
         return map;
     }
 
-    private Map<String, List<DoctorClinic>> buildClinicsMap(List<String> doctorIds) {
-        Map<String, List<DoctorClinic>> map = new HashMap<>();
-        for (String id : doctorIds) {
-            map.put(id, doctorClinicRepository.findByUserIdOrderByIsPrimaryDescCreatedAtAsc(id));
+    private Map<UUID, List<DoctorClinic>> buildClinicsMap(List<UUID> ids) {
+        Map<UUID, List<DoctorClinic>> map = new HashMap<>();
+        for (UUID id : ids) {
+            map.put(id,
+                    doctorClinicRepository
+                            .findByUserIdOrderByIsPrimaryDescCreatedAtAsc(id));
         }
         return map;
     }
@@ -165,87 +162,96 @@ public class DoctorSearchService {
         return getPrivacyFlag(settings, "profileVisible", true);
     }
 
-    private boolean getPrivacyFlag(DoctorSettings settings, String key, boolean defaultValue) {
-        if (settings == null || settings.getPrivacySettings() == null) {
+    private boolean getPrivacyFlag(DoctorSettings settings,
+            String key,
+            boolean defaultValue) {
+        if (settings == null || settings.getPrivacySettings() == null)
             return defaultValue;
-        }
+
         try {
-            Map<String, Boolean> privacy = objectMapper.readValue(
-                    settings.getPrivacySettings(), new TypeReference<Map<String, Boolean>>() {});
+            Map<String, Boolean> privacy = objectMapper.readValue(settings.getPrivacySettings(),
+                    new TypeReference<>() {
+                    });
             return privacy.getOrDefault(key, defaultValue);
         } catch (Exception e) {
             return defaultValue;
         }
     }
 
-    private boolean matchesQuery(User user, DoctorSettings settings,
-            List<DoctorClinic> clinics, String query) {
-        if (query == null || query.isBlank()) return true;
+    private boolean matchesQuery(User user,
+            DoctorSettings settings,
+            List<DoctorClinic> clinics,
+            String query) {
 
-        String q = query.toLowerCase().trim();
+        if (query == null || query.isBlank())
+            return true;
+
+        String q = query.toLowerCase();
+
+        if (userProfileHelper.getName(user) != null &&
+                userProfileHelper.getName(user).toLowerCase().contains(q))
+            return true;
 
         if (settings != null) {
-            if (settings.getSpecialty() != null
-                    && settings.getSpecialty().toLowerCase().contains(q)) return true;
-            if (settings.getQualifications() != null
-                    && settings.getQualifications().toLowerCase().contains(q)) return true;
+            if (settings.getSpecialty() != null &&
+                    settings.getSpecialty().toLowerCase().contains(q))
+                return true;
+            if (settings.getQualifications() != null &&
+                    settings.getQualifications().toLowerCase().contains(q))
+                return true;
         }
+
         if (clinics != null) {
             for (DoctorClinic clinic : clinics) {
-                if (clinic.getClinicName() != null
-                        && clinic.getClinicName().toLowerCase().contains(q)) return true;
-                if (clinic.getCity() != null
-                        && clinic.getCity().toLowerCase().contains(q)) return true;
+                if (clinic.getClinicName() != null &&
+                        clinic.getClinicName().toLowerCase().contains(q))
+                    return true;
             }
         }
+
         return false;
     }
 
-    private DoctorSearchResult toSearchResult(User user, DoctorSettings settings,
+    private DoctorSearchResult toSearchResult(User user,
+            DoctorSettings settings,
             List<DoctorClinic> clinics) {
-        DoctorClinic primaryClinic = clinics.stream()
+
+        DoctorClinic primary = clinics.stream()
                 .filter(c -> Boolean.TRUE.equals(c.getIsPrimary()))
                 .findFirst()
-                .orElse(clinics.isEmpty() ? null : clinics.get(0));
+                .orElse(null);
 
         return DoctorSearchResult.builder()
-                .id(user.getId())
-                .name(user.getName())
+                .id(user.getId().toString())
+                .name(userProfileHelper.getName(user))
                 .email(user.getEmail())
                 .phone(user.getPhone())
-                .profileImageUrl(user.getProfileImageUrl())
-                .bio(user.getBio())
+                .profileImageUrl(userProfileHelper.getProfileImage(user))
+                .bio(userProfileHelper.getBio(user))
                 .specialty(settings != null ? settings.getSpecialty() : null)
                 .qualifications(settings != null ? settings.getQualifications() : null)
-                .experienceYears(user.getExperienceYears())
+                .experienceYears(userProfileHelper.getExperienceYears(user))
                 .consultationFee(settings != null ? settings.getConsultationFee() : null)
-                .languages(parseJsonList(settings != null ? settings.getLanguages() : null))
-                .expertise(parseJsonList(settings != null ? settings.getExpertise() : null))
-                .verificationStatus(user.getProfessionalVerificationStatus().name())
-                .city(user.getCity())
-                .state(user.getState())
-                .primaryClinicName(primaryClinic != null ? primaryClinic.getClinicName() : null)
-                .primaryClinicCity(primaryClinic != null ? primaryClinic.getCity() : null)
-                .availableForConsultation(settings != null ? settings.getAvailableForConsultation() : null)
-                .onlineConsultationEnabled(settings != null ? settings.getOnlineConsultationEnabled() : null)
+                .verificationStatus(
+                        userProfileHelper.getVerificationStatus(user).name())
+                .primaryClinicName(primary != null ? primary.getClinicName() : null)
+                .primaryClinicCity(primary != null ? primary.getCity() : null)
+                .availableForConsultation(
+                        settings != null ? settings.getAvailableForConsultation() : null)
+                .onlineConsultationEnabled(
+                        settings != null ? settings.getOnlineConsultationEnabled() : null)
                 .build();
     }
 
     private List<String> parseJsonList(String json) {
-        if (json == null || json.isBlank()) return List.of();
+        if (json == null || json.isBlank())
+            return List.of();
         try {
-            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
+            return objectMapper.readValue(json,
+                    new TypeReference<List<String>>() {
+                    });
         } catch (Exception e) {
             return List.of();
-        }
-    }
-
-    private Object parseWeeklySchedule(String json) {
-        if (json == null || json.isBlank()) return null;
-        try {
-            return objectMapper.readValue(json, Object.class);
-        } catch (Exception e) {
-            return null;
         }
     }
 }

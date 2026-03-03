@@ -1,86 +1,67 @@
 package com.medsyncpro.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import jakarta.validation.constraints.Email;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 import java.util.UUID;
+
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "users", indexes = {
-    @Index(name = "idx_email", columnList = "email")
+        @Index(name = "idx_email", columnList = "email"),
+        @Index(name = "idx_role", columnList = "role")
 })
-@Data
-public class User {
-    @Id
-    @Column(length = 36, updatable = false, nullable = false)
-    private String id;
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@SQLDelete(sql = "UPDATE users SET deleted = true WHERE id=?")
+@SQLRestriction("deleted = false")
+public class User extends BaseEntity {
 
-    @PrePersist
-    public void generateId() {
-        if (this.id == null) {
-            this.id = UUID.randomUUID().toString();
-        }
-    }
-    
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Email
     @Column(unique = true, nullable = false)
     private String email;
-    
+
     @Column(nullable = false)
     private String password;
-    
-    @Column(nullable = false)
-    private String name;
-    
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role;
-    
+
+    @Builder.Default
     @Column(nullable = false)
-    private Boolean emailVerified = false;
-    
+    private boolean emailVerified = false;
+
+    @Builder.Default
     @Column(nullable = false)
-    private Boolean deleted = false;
-    
+    private boolean phoneVerified = false;
+
+    @Builder.Default
     @Column(nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
-    
-    private LocalDateTime updatedAt;
-    
+    private boolean termsAccepted = false;
+
     private String phone;
-    
-    private LocalDate dob;
-    
-    @Column(length = 500)
-    private String address;
-    
-    @Enumerated(EnumType.STRING)
-    private Gender gender;
-    
-    private String profileImageUrl;
 
-    private String city;
-
-    private String state;
-
-    @Column(length = 10)
-    private String bloodGroup;
-
-    @Column(columnDefinition = "TEXT")
-    private String bio;
-
-    private Integer experienceYears;
-
-    @Column(length = 255)
     private String fcmToken;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
-    private VerificationStatus professionalVerificationStatus = VerificationStatus.UNVERIFIED;
-
+    @Builder.Default
     @Column(nullable = false)
     private Integer tokenVersion = 0;
-    
-    @Version
-    private Long version;
 }
+
+
+// Total fields = 10 (id, email, password, role, emailVerified, phoneVerified, termsAccepted, phone, fcmToken, tokenVersion)

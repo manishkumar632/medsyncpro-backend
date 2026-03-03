@@ -1,6 +1,5 @@
-package com.medsyncpro.dto;
+package com.medsyncpro.dto.response;
 
-import com.medsyncpro.entity.DocumentType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,7 +13,9 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class DocumentResponse {
     private Long id;
-    private DocumentType type;
+    private Long documentTypeId;
+    private String typeName;
+    private String typeCode;
     private String url;
     private String fileName;
     private Long fileSize;

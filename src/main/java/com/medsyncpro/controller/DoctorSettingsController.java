@@ -11,10 +11,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import com.medsyncpro.utils.UserProfileHelper;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/doctor/settings")
@@ -23,9 +25,10 @@ public class DoctorSettingsController {
 
     private final DoctorSettingsService service;
     private final UserRepository userRepository;
+    private final UserProfileHelper userProfileHelper;
 
     // JWT sets auth.getName() = email, not userId. Resolve it.
-    private String getUserId(Authentication auth) {
+    private UUID getUserId(Authentication auth) {
         String email = auth.getName();
         User user = userRepository.findByEmail(email);
         if (user == null) throw new ResourceNotFoundException("User not found");
@@ -38,7 +41,7 @@ public class DoctorSettingsController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> getAllSettings(Authentication auth) {
-        String userId = getUserId(auth);
+        UUID userId = getUserId(auth);
         Map<String, Object> all = new LinkedHashMap<>();
         all.put("professional", service.getProfessionalInfo(userId));
         all.put("clinics", service.getClinics(userId));
@@ -89,13 +92,13 @@ public class DoctorSettingsController {
     public ResponseEntity<ApiResponse<ClinicResponse>> updateClinic(
             Authentication auth, @PathVariable String id, @RequestBody ClinicRequest req) {
         return ResponseEntity.ok(ApiResponse.success(
-                service.updateClinic(getUserId(auth), id, req), "Clinic updated"));
+                service.updateClinic(String.valueOf(getUserId(auth)), id, req), "Clinic updated"));
     }
 
     @DeleteMapping("/clinics/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteClinic(
             Authentication auth, @PathVariable String id) {
-        service.deleteClinic(getUserId(auth), id);
+        service.deleteClinic(String.valueOf(getUserId(auth)), id);
         return ResponseEntity.ok(ApiResponse.success(null, "Clinic deleted"));
     }
 

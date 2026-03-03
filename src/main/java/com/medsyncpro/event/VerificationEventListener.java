@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import com.medsyncpro.utils.UserProfileHelper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -25,6 +27,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Slf4j
 public class VerificationEventListener {
+    @Autowired
+    private UserProfileHelper userProfileHelper;
+
 
     private final UserRepository userRepository;
     private final NotificationRepository notificationRepository;
@@ -50,7 +55,7 @@ public class VerificationEventListener {
         notification.setType("VERIFICATION_REQUEST");
         notification.setReferenceId(request.getId());
         notification.setTitle("New " + user.getRole() + " Signup");
-        notification.setMessage(user.getName() + " has signed up and requires verification.");
+        notification.setMessage(user.getEmail() + " has signed up and requires verification.");
         notification.setRecipientId(null); 
         notificationRepository.save(notification);
 
@@ -71,7 +76,7 @@ public class VerificationEventListener {
     public void onDocumentSubmitted(DocumentSubmittedEvent event) {
         User user = event.getUser();
         String title = "Verification Documents Submitted";
-        String message = "Dr. " + user.getName() + " has submitted documents for professional verification.";
+        String message = "Dr. " + userProfileHelper.getName(user) + " has submitted documents for professional verification.";
 
         log.info("Handling DocumentSubmittedEvent for user: {}", user.getEmail());
 
@@ -84,7 +89,7 @@ public class VerificationEventListener {
             notification.setTitle(title);
             notification.setMessage(message);
             notification.setType("VERIFICATION_REQUEST");
-            notification.setRecipientId(admin.getId());
+            notification.setRecipientId(String.valueOf(admin.getId()));
             notification.setIsRead(false);
             notification.setCreatedAt(LocalDateTime.now());
             notificationRepository.save(notification);
@@ -123,7 +128,7 @@ public class VerificationEventListener {
         notification.setTitle(title);
         notification.setMessage(message);
         notification.setType("VERIFICATION_DECISION");
-        notification.setRecipientId(user.getId());
+        notification.setRecipientId(String.valueOf(user.getId()));
         notification.setIsRead(false);
         notification.setCreatedAt(LocalDateTime.now());
         notificationRepository.save(notification);

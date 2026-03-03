@@ -4,106 +4,108 @@ import com.medsyncpro.entity.RefreshToken;
 import com.medsyncpro.entity.User;
 import com.medsyncpro.exception.BusinessException;
 import com.medsyncpro.repository.RefreshTokenRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.stereotype.Service;
+
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Base64;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class RefreshTokenService {
-    
+
     private final RefreshTokenRepository refreshTokenRepository;
-    
-    @Value("${jwt.refresh-expiration:604800000}")
-    private long refreshExpiration;
-    
-    /**
-     * Create a new refresh token for a user + device combination.
-     * Revokes any existing token for the same device first.
-     */
-    @Transactional
-    public RefreshToken createRefreshToken(User user, String deviceInfo) {
-        // Revoke existing tokens for this device
-        refreshTokenRepository.revokeByUserAndDevice(user, deviceInfo);
-        
+
+    private static final long REFRESH_EXPIRY_DAYS = 7;
+
+    // ─────────────────────────────────────────────
+    // CREATE NEW REFRESH TOKEN
+    // ─────────────────────────────────────────────
+
+    public String createRefreshToken(User user, String deviceInfo) {
+
+        String rawToken = UUID.randomUUID().toString();
+        String tokenHash = hash(rawToken);
+
         RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setToken(UUID.randomUUID().toString());
         refreshToken.setUser(user);
+        refreshToken.setTokenHash(tokenHash);
         refreshToken.setDeviceInfo(deviceInfo);
-        refreshToken.setExpiryDate(Instant.now().plusMillis(refreshExpiration));
-        refreshToken.setRevoked(false);
-        
-        refreshToken = refreshTokenRepository.save(refreshToken);
-        log.info("Created refresh token for user {} on device {}", user.getEmail(), deviceInfo);
-        return refreshToken;
+        refreshToken.setExpiryDate(
+                Instant.now().plus(REFRESH_EXPIRY_DAYS, ChronoUnit.DAYS));
+
+        refreshTokenRepository.save(refreshToken);
+
+        return rawToken; // send raw token to client
     }
-    
-    /**
-     * Verify a refresh token and return it if valid.
-     * Throws if expired, revoked, or not found.
-     */
-    @Transactional
-    public RefreshToken verifyRefreshToken(String token) {
-        RefreshToken refreshToken = refreshTokenRepository.findByTokenAndRevokedFalse(token)
-                .orElseThrow(() -> new BusinessException("INVALID_REFRESH_TOKEN", "Refresh token is invalid or has been revoked"));
-        
-        if (refreshToken.getExpiryDate().isBefore(Instant.now())) {
-            refreshToken.setRevoked(true);
-            refreshTokenRepository.save(refreshToken);
-            throw new BusinessException("REFRESH_TOKEN_EXPIRED", "Refresh token has expired. Please login again");
+
+    // ─────────────────────────────────────────────
+    // VALIDATE & ROTATE
+    // ─────────────────────────────────────────────
+
+    public User validateAndRotate(String rawToken) {
+
+        String tokenHash = hash(rawToken);
+
+        RefreshToken storedToken = refreshTokenRepository
+                .findByTokenHashAndRevokedFalse(tokenHash)
+                .orElseThrow(() -> new BusinessException("INVALID_REFRESH_TOKEN",
+                        "Refresh token invalid"));
+
+        if (storedToken.getExpiryDate().isBefore(Instant.now())) {
+            storedToken.setRevoked(true);
+            refreshTokenRepository.save(storedToken);
+            throw new BusinessException("REFRESH_TOKEN_EXPIRED",
+                    "Refresh token expired");
         }
-        
-        return refreshToken;
+
+        // ROTATION (important security step)
+        storedToken.setRevoked(true);
+        refreshTokenRepository.save(storedToken);
+
+        return storedToken.getUser();
     }
-    
-    /**
-     * Rotate refresh token: revoke old, create new for same device.
-     */
-    @Transactional
-    public RefreshToken rotateRefreshToken(RefreshToken oldToken) {
-        oldToken.setRevoked(true);
-        refreshTokenRepository.save(oldToken);
-        return createRefreshToken(oldToken.getUser(), oldToken.getDeviceInfo());
+
+    // ─────────────────────────────────────────────
+    // LOGOUT SINGLE DEVICE
+    // ─────────────────────────────────────────────
+
+    public void revokeToken(String rawToken) {
+        String tokenHash = hash(rawToken);
+        refreshTokenRepository
+                .findByTokenHashAndRevokedFalse(tokenHash)
+                .ifPresent(token -> {
+                    token.setRevoked(true);
+                    refreshTokenRepository.save(token);
+                });
     }
-    
-    /**
-     * Revoke all refresh tokens for a specific device.
-     */
-    @Transactional
-    public void revokeByDevice(User user, String deviceInfo) {
-        int revoked = refreshTokenRepository.revokeByUserAndDevice(user, deviceInfo);
-        log.info("Revoked {} refresh tokens for user {} on device {}", revoked, user.getEmail(), deviceInfo);
+
+    // ─────────────────────────────────────────────
+    // LOGOUT ALL DEVICES
+    // ─────────────────────────────────────────────
+
+    public void revokeAllUserTokens(User user) {
+        refreshTokenRepository.deleteByUser(user);
     }
-    
-    /**
-     * Revoke ALL refresh tokens for a user (logout all devices).
-     */
-    @Transactional
-    public void revokeAllForUser(User user) {
-        int revoked = refreshTokenRepository.revokeAllByUser(user);
-        log.info("Revoked {} refresh tokens for user {} (all devices)", revoked, user.getEmail());
-    }
-    
-    public long getRefreshExpiration() {
-        return refreshExpiration;
-    }
-    
-    /**
-     * Cleanup expired/revoked tokens every 6 hours.
-     */
-    @Scheduled(fixedRate = 21600000) // Every 6 hours
-    @Transactional
-    public void cleanupExpired() {
-        int deleted = refreshTokenRepository.deleteAllExpiredBefore(Instant.now());
-        if (deleted > 0) {
-            log.info("Cleaned up {} expired refresh tokens", deleted);
+
+    // ─────────────────────────────────────────────
+    // HASHING
+    // ─────────────────────────────────────────────
+
+    private String hash(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashed = digest.digest(value.getBytes());
+            return Base64.getEncoder().encodeToString(hashed);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to hash token");
         }
     }
 }

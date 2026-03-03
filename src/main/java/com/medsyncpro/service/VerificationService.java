@@ -1,6 +1,5 @@
 package com.medsyncpro.service;
 
-import com.medsyncpro.entity.Role;
 import com.medsyncpro.entity.User;
 import com.medsyncpro.entity.VerificationToken;
 import com.medsyncpro.exception.BusinessException;
@@ -77,7 +76,7 @@ public class VerificationService {
         User user = verificationToken.getUser();
         
         // Check if already verified
-        if (user.getEmailVerified()) {
+        if (user.isEmailVerified()) {
             throw new BusinessException("ALREADY_VERIFIED", "Email already verified");
         }
         
@@ -88,11 +87,6 @@ public class VerificationService {
         
         // Activate user
         user.setEmailVerified(true);
-        
-        // Auto-approve PATIENT verify status
-        if (user.getRole() == Role.PATIENT) {
-            user.setProfessionalVerificationStatus(com.medsyncpro.entity.VerificationStatus.VERIFIED);
-        }
         
         userRepository.save(user);
         
@@ -113,7 +107,7 @@ public class VerificationService {
             throw new BusinessException("EMAIL_SENT", "If the email exists, a verification link has been sent");
         }
         
-        if (user.getEmailVerified()) {
+        if (user.isEmailVerified()) {
             throw new BusinessException("ALREADY_VERIFIED", "Email already verified");
         }
         

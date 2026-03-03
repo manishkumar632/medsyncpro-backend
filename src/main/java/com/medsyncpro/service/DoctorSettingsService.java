@@ -2,12 +2,14 @@ package com.medsyncpro.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.medsyncpro.dto.doctor.*;
+import com.medsyncpro.entity.Doctor;
 import com.medsyncpro.entity.DoctorClinic;
 import com.medsyncpro.entity.DoctorSettings;
 import com.medsyncpro.entity.User;
 import com.medsyncpro.exception.BusinessException;
 import com.medsyncpro.exception.ResourceNotFoundException;
 import com.medsyncpro.repository.DoctorClinicRepository;
+import com.medsyncpro.repository.DoctorRepository;
 import com.medsyncpro.repository.DoctorSettingsRepository;
 import com.medsyncpro.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,17 +32,19 @@ public class DoctorSettingsService {
     private final UserRepository userRepo;
     private final PasswordEncoder passwordEncoder;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    private final DoctorRepository doctorRepository;
 
     // ── Helper: get-or-create settings row ──
-    private DoctorSettings getOrCreateSettings(String userId) {
-        return settingsRepo.findByUserId(userId).orElseGet(() -> {
-            DoctorSettings ds = new DoctorSettings();
-            ds.setUserId(userId);
-            return settingsRepo.save(ds);
-        });
+    private DoctorSettings getOrCreateSettings(UUID userId) {
+        return settingsRepo.findByUserId(userId)
+                .orElseGet(() -> {
+                    DoctorSettings ds = new DoctorSettings();
+                    ds.setUser(userRepo.getReferenceById(userId));
+                    return settingsRepo.save(ds);
+                });
     }
 
-    private User findUser(String userId) {
+    private User findUser(UUID userId) {
         return userRepo.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }
@@ -85,13 +89,15 @@ public class DoctorSettingsService {
     // 1. PROFESSIONAL INFO
     // ═══════════════════════════════════════════
 
-    public ProfessionalInfoResponse getProfessionalInfo(String userId) {
+    public ProfessionalInfoResponse getProfessionalInfo(UUID userId) {
         DoctorSettings ds = getOrCreateSettings(userId);
-        User user = findUser(userId);
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor profile not found"));
+
         return ProfessionalInfoResponse.builder()
                 .specialty(ds.getSpecialty())
                 .qualifications(ds.getQualifications())
-                .experienceYears(user.getExperienceYears())
+                .experienceYears(doctor.getExperienceYears())
                 .medRegNumber(ds.getMedRegNumber())
                 .consultationFee(ds.getConsultationFee())
                 .languages(parseJsonList(ds.getLanguages()))
@@ -100,9 +106,10 @@ public class DoctorSettingsService {
     }
 
     @Transactional
-    public ProfessionalInfoResponse updateProfessionalInfo(String userId, ProfessionalInfoRequest req) {
+    public ProfessionalInfoResponse updateProfessionalInfo(UUID userId, ProfessionalInfoRequest req) {
         DoctorSettings ds = getOrCreateSettings(userId);
-        User user = findUser(userId);
+        Doctor doctor = doctorRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor profile not found"));
 
         if (req.getSpecialty() != null) ds.setSpecialty(req.getSpecialty());
         if (req.getQualifications() != null) ds.setQualifications(req.getQualifications());
@@ -110,12 +117,12 @@ public class DoctorSettingsService {
         if (req.getConsultationFee() != null) ds.setConsultationFee(req.getConsultationFee());
         if (req.getLanguages() != null) ds.setLanguages(toJsonList(req.getLanguages()));
         if (req.getExpertise() != null) ds.setExpertise(toJsonList(req.getExpertise()));
-        if (req.getExperienceYears() != null) user.setExperienceYears(req.getExperienceYears());
+        if (req.getExperienceYears() != null) doctor.setExperienceYears(req.getExperienceYears());
 
         ds.setUpdatedAt(LocalDateTime.now());
-        user.setUpdatedAt(LocalDateTime.now());
+        doctor.setUpdatedAt(LocalDateTime.now());
         settingsRepo.save(ds);
-        userRepo.save(user);
+        doctorRepository.save(doctor);
 
         return getProfessionalInfo(userId);
     }
@@ -124,11 +131,11 @@ public class DoctorSettingsService {
     // 2. CLINICS
     // ═══════════════════════════════════════════
 
-    public List<ClinicResponse> getClinics(String userId) {
+    public List<ClinicResponse> getClinics(UUID userId) {
         return clinicRepo.findByUserIdOrderByIsPrimaryDescCreatedAtAsc(userId)
                 .stream()
                 .map(c -> ClinicResponse.builder()
-                        .id(c.getId())
+                        .id(c.getId().toString())
                         .clinicName(c.getClinicName())
                         .address(c.getAddress())
                         .city(c.getCity())
@@ -138,9 +145,9 @@ public class DoctorSettingsService {
     }
 
     @Transactional
-    public ClinicResponse addClinic(String userId, ClinicRequest req) {
+    public ClinicResponse addClinic(UUID userId, ClinicRequest req) {
         DoctorClinic clinic = new DoctorClinic();
-        clinic.setUserId(userId);
+        clinic.setUser(userRepo.getReferenceById(userId));
         clinic.setClinicName(req.getClinicName());
         clinic.setAddress(req.getAddress());
         clinic.setCity(req.getCity());
@@ -154,7 +161,7 @@ public class DoctorSettingsService {
 
         clinic = clinicRepo.save(clinic);
         return ClinicResponse.builder()
-                .id(clinic.getId())
+                .id(clinic.getId().toString())
                 .clinicName(clinic.getClinicName())
                 .address(clinic.getAddress())
                 .city(clinic.getCity())
@@ -164,9 +171,9 @@ public class DoctorSettingsService {
 
     @Transactional
     public ClinicResponse updateClinic(String userId, String clinicId, ClinicRequest req) {
-        DoctorClinic clinic = clinicRepo.findById(clinicId)
+        DoctorClinic clinic = clinicRepo.findById(UUID.fromString(clinicId))
                 .orElseThrow(() -> new ResourceNotFoundException("Clinic not found"));
-        if (!clinic.getUserId().equals(userId)) {
+        if (!clinic.getUser().getId().equals(UUID.fromString(userId))) {
             throw new BusinessException("FORBIDDEN", "Not your clinic");
         }
 
@@ -175,7 +182,7 @@ public class DoctorSettingsService {
         if (req.getCity() != null) clinic.setCity(req.getCity());
         if (req.getIsPrimary() != null) {
             if (Boolean.TRUE.equals(req.getIsPrimary())) {
-                clinicRepo.findByUserIdOrderByIsPrimaryDescCreatedAtAsc(userId)
+                clinicRepo.findByUserIdOrderByIsPrimaryDescCreatedAtAsc(UUID.fromString(userId))
                         .forEach(c -> { c.setIsPrimary(false); clinicRepo.save(c); });
             }
             clinic.setIsPrimary(req.getIsPrimary());
@@ -183,7 +190,7 @@ public class DoctorSettingsService {
 
         clinic = clinicRepo.save(clinic);
         return ClinicResponse.builder()
-                .id(clinic.getId())
+                .id(clinic.getId().toString())
                 .clinicName(clinic.getClinicName())
                 .address(clinic.getAddress())
                 .city(clinic.getCity())
@@ -193,9 +200,9 @@ public class DoctorSettingsService {
 
     @Transactional
     public void deleteClinic(String userId, String clinicId) {
-        DoctorClinic clinic = clinicRepo.findById(clinicId)
+        DoctorClinic clinic = clinicRepo.findById(UUID.fromString(clinicId))
                 .orElseThrow(() -> new ResourceNotFoundException("Clinic not found"));
-        if (!clinic.getUserId().equals(userId)) {
+        if (!clinic.getUser().getId().equals(UUID.fromString(userId))) {
             throw new BusinessException("FORBIDDEN", "Not your clinic");
         }
         clinicRepo.delete(clinic);
@@ -205,7 +212,7 @@ public class DoctorSettingsService {
     // 3. AVAILABILITY
     // ═══════════════════════════════════════════
 
-    public Map<String, Object> getAvailability(String userId) {
+    public Map<String, Object> getAvailability(UUID userId) {
         DoctorSettings ds = getOrCreateSettings(userId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("availableForConsultation", ds.getAvailableForConsultation());
@@ -223,7 +230,7 @@ public class DoctorSettingsService {
     }
 
     @Transactional
-    public Map<String, Object> updateAvailability(String userId, AvailabilityRequest req) {
+    public Map<String, Object> updateAvailability(UUID userId, AvailabilityRequest req) {
         DoctorSettings ds = getOrCreateSettings(userId);
         if (req.getAvailableForConsultation() != null) ds.setAvailableForConsultation(req.getAvailableForConsultation());
         if (req.getWeeklySchedule() != null) ds.setWeeklySchedule(toJson(req.getWeeklySchedule()));
@@ -256,7 +263,7 @@ public class DoctorSettingsService {
     // 4. CONSULTATION SETTINGS
     // ═══════════════════════════════════════════
 
-    public Map<String, Object> getConsultationSettings(String userId) {
+    public Map<String, Object> getConsultationSettings(UUID userId) {
         DoctorSettings ds = getOrCreateSettings(userId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("slotDurationMinutes", ds.getSlotDurationMinutes());
@@ -268,7 +275,7 @@ public class DoctorSettingsService {
     }
 
     @Transactional
-    public Map<String, Object> updateConsultationSettings(String userId, ConsultationSettingsRequest req) {
+    public Map<String, Object> updateConsultationSettings(UUID userId, ConsultationSettingsRequest req) {
         DoctorSettings ds = getOrCreateSettings(userId);
         if (req.getSlotDurationMinutes() != null) ds.setSlotDurationMinutes(req.getSlotDurationMinutes());
         if (req.getFollowUpWindowDays() != null) ds.setFollowUpWindowDays(req.getFollowUpWindowDays());
@@ -294,7 +301,7 @@ public class DoctorSettingsService {
             "pushNotifs", true
     );
 
-    public Map<String, Boolean> getNotificationPrefs(String userId) {
+    public Map<String, Boolean> getNotificationPrefs(UUID userId) {
         DoctorSettings ds = getOrCreateSettings(userId);
         Map<String, Boolean> stored = parseJsonBoolMap(ds.getNotificationPrefs());
         if (stored.isEmpty()) return new LinkedHashMap<>(DEFAULT_NOTIF_PREFS);
@@ -305,7 +312,7 @@ public class DoctorSettingsService {
     }
 
     @Transactional
-    public Map<String, Boolean> updateNotificationPrefs(String userId, NotificationPrefsRequest req) {
+    public Map<String, Boolean> updateNotificationPrefs(UUID userId, NotificationPrefsRequest req) {
         DoctorSettings ds = getOrCreateSettings(userId);
         Map<String, Boolean> current = getNotificationPrefs(userId);
         if (req.getPrefs() != null) current.putAll(req.getPrefs());
@@ -326,7 +333,7 @@ public class DoctorSettingsService {
             "dataSharing", false
     );
 
-    public Map<String, Boolean> getPrivacySettings(String userId) {
+    public Map<String, Boolean> getPrivacySettings(UUID userId) {
         DoctorSettings ds = getOrCreateSettings(userId);
         Map<String, Boolean> stored = parseJsonBoolMap(ds.getPrivacySettings());
         if (stored.isEmpty()) return new LinkedHashMap<>(DEFAULT_PRIVACY);
@@ -336,7 +343,7 @@ public class DoctorSettingsService {
     }
 
     @Transactional
-    public Map<String, Boolean> updatePrivacySettings(String userId, PrivacySettingsRequest req) {
+    public Map<String, Boolean> updatePrivacySettings(UUID userId, PrivacySettingsRequest req) {
         DoctorSettings ds = getOrCreateSettings(userId);
         Map<String, Boolean> current = getPrivacySettings(userId);
         if (req.getSettings() != null) current.putAll(req.getSettings());
@@ -351,7 +358,7 @@ public class DoctorSettingsService {
     // ═══════════════════════════════════════════
 
     @Transactional
-    public void changePassword(String userId, ChangePasswordRequest req) {
+    public void changePassword(UUID userId, ChangePasswordRequest req) {
         if (!req.getNewPassword().equals(req.getConfirmPassword())) {
             throw new BusinessException("PASSWORD_MISMATCH", "New password and confirm password do not match");
         }
@@ -369,7 +376,7 @@ public class DoctorSettingsService {
     }
 
     @Transactional
-    public Map<String, Boolean> toggleTwoFactor(String userId, boolean enabled) {
+    public Map<String, Boolean> toggleTwoFactor(UUID userId, boolean enabled) {
         DoctorSettings ds = getOrCreateSettings(userId);
         ds.setTwoFactorEnabled(enabled);
         ds.setUpdatedAt(LocalDateTime.now());
@@ -377,7 +384,7 @@ public class DoctorSettingsService {
         return Map.of("twoFactorEnabled", enabled);
     }
 
-    public Map<String, Object> getSecurityInfo(String userId) {
+    public Map<String, Object> getSecurityInfo(UUID userId) {
         DoctorSettings ds = getOrCreateSettings(userId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("twoFactorEnabled", ds.getTwoFactorEnabled());
@@ -388,15 +395,16 @@ public class DoctorSettingsService {
     // 8. ACCOUNT
     // ═══════════════════════════════════════════
 
-    public AccountSummaryResponse getAccountSummary(String userId) {
+    public AccountSummaryResponse getAccountSummary(UUID userId) {
         User user = findUser(userId);
+        Doctor doctor = doctorRepository.findByUserId(userId).orElseThrow(() -> new BusinessException("DOCTOR_PROFILE_NOT_FOUND", "Doctor profile not found for user ID: " + userId));
         return AccountSummaryResponse.builder()
-                .userId(user.getId())
+                .userId(user.getId().toString())
                 .email(user.getEmail())
-                .name(user.getName())
+                .name(doctor.getName())
                 .role(user.getRole().name())
-                .verificationStatus(user.getProfessionalVerificationStatus().name())
-                .emailVerified(user.getEmailVerified())
+                .verificationStatus(doctor.isVerified() ? "VERIFIED" : "PENDING")
+                .emailVerified(user.isEmailVerified())
                 .isActive(!user.getDeleted())
                 .memberSince(user.getCreatedAt())
                 .lastUpdated(user.getUpdatedAt())
@@ -404,7 +412,7 @@ public class DoctorSettingsService {
     }
 
     @Transactional
-    public void deactivateAccount(String userId) {
+    public void deactivateAccount(UUID userId) {
         User user = findUser(userId);
         user.setDeleted(true);
         user.setUpdatedAt(LocalDateTime.now());
@@ -413,7 +421,7 @@ public class DoctorSettingsService {
     }
 
     @Transactional
-    public void deleteAccount(String userId) {
+    public void deleteAccount(UUID userId) {
         User user = findUser(userId);
         user.setDeleted(true);
         user.setUpdatedAt(LocalDateTime.now());
