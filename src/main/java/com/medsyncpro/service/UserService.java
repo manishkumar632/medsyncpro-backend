@@ -46,7 +46,7 @@ public class UserService {
             throw new BusinessException("ADMIN_REGISTRATION_DISABLED", "Admin registration is not allowed");
         }
 
-        if (request.getTermsAccepted() == false) {
+        if (request.isTermsAccepted() == false) {
             throw new BusinessException("TERMS_AND_CONDITION_NOT_ACCEPTED", "Please accept terms and condition");
         }
         

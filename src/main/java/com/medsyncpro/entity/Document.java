@@ -1,39 +1,52 @@
 package com.medsyncpro.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.util.UUID;
 
 @Entity
 @Table(name = "documents", indexes = {
         @Index(name = "idx_document_user_id", columnList = "user_id"),
-        @Index(name = "idx_document_type_id", columnList = "document_type_id")
 })
-@Data
-public class Document {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Document extends BaseEntity {
 
-    @Column(name = "user_id", nullable = false, length = 36)
-    private String userId;
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "document_type_id", nullable = false)
-    private DocumentTypeEntity documentType;
+    @JoinColumn(name = "document_type_id", nullable = true)
+    private DocumentType documentType;
+
+    @Column(nullable = false)
+    private String name;
 
     @Column(nullable = false)
     private String url;
 
     @Column(nullable = false)
-    private String fileName;
+    private Long size;
 
-    @Column(nullable = false)
-    private Long fileSize;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private FileType fileType;
 
-    @Column(nullable = false, length = 20)
-    private String status = "UPLOADED";
-
-    @Column(nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    @Column(nullable = false, length = 25)
+    private Status status = Status.PENDING;
 }

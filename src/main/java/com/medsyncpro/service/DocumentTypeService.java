@@ -2,20 +2,26 @@ package com.medsyncpro.service;
 
 import com.medsyncpro.dto.request.DocumentTypeRequest;
 import com.medsyncpro.dto.response.DocumentTypeConfigResponse;
+import com.medsyncpro.entity.DocumentType;
 import com.medsyncpro.entity.DocumentTypeEntity;
 import com.medsyncpro.entity.ModelDocumentType;
+import com.medsyncpro.entity.Role;
 import com.medsyncpro.entity.UserModelType;
 import com.medsyncpro.exception.BusinessException;
 import com.medsyncpro.exception.ResourceNotFoundException;
 import com.medsyncpro.repository.DocumentRepository;
 import com.medsyncpro.repository.DocumentTypeEntityRepository;
 import com.medsyncpro.repository.ModelDocumentTypeRepository;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -51,53 +57,52 @@ public class DocumentTypeService {
 
     // ── Create & assign ──────────────────────────────────────────────────────
 
-    @Transactional
-    public DocumentTypeConfigResponse createDocumentType(DocumentTypeRequest request) {
-        UserModelType modelType = parseModelType(request.getModelType());
-        String code = toCode(request.getName());
+    // @Transactional
+    // public DocumentTypeConfigResponse createDocumentType(HttpServletRequest request, HttpServletResponse response, DocumentTypeRequest req) {
+    //     Role role = request.getRole();
+    //     String code = toCode(request.getName());
+    //     // Check duplicate name (case-insensitive) for this model
+    //     DocumentType existingType = documentTypeRepository
+    //             .findByCodeAndDeletedFalse(code)
+    //             .orElse(null);
 
-        // Check duplicate name (case-insensitive) for this model
-        DocumentTypeEntity existingType = documentTypeRepository
-                .findByCodeAndDeletedFalse(code)
-                .orElse(null);
+    //     if (existingType != null) {
+    //         // Type exists globally; check if already assigned to this model
+    //         boolean alreadyAssigned = modelDocumentTypeRepository
+    //                 .existsByModelTypeAndDocumentTypeAndDeletedFalse(modelType, existingType);
+    //         if (alreadyAssigned) {
+    //             throw new BusinessException("DUPLICATE_DOCUMENT_TYPE",
+    //                     "Document type '" + request.getName() + "' is already assigned to " + modelType);
+    //         }
+    //     }
 
-        if (existingType != null) {
-            // Type exists globally; check if already assigned to this model
-            boolean alreadyAssigned = modelDocumentTypeRepository
-                    .existsByModelTypeAndDocumentTypeAndDeletedFalse(modelType, existingType);
-            if (alreadyAssigned) {
-                throw new BusinessException("DUPLICATE_DOCUMENT_TYPE",
-                        "Document type '" + request.getName() + "' is already assigned to " + modelType);
-            }
-        }
+    //     // Create or reuse the DocumentTypeEntity
+    //     DocumentTypeEntity docType;
+    //     if (existingType != null) {
+    //         docType = existingType;
+    //     } else {
+    //         docType = DocumentTypeEntity.builder()
+    //                 .name(request.getName().trim())
+    //                 .code(code)
+    //                 .description(request.getDescription())
+    //                 .active(true)
+    //                 .build();
+    //         docType = documentTypeRepository.save(docType);
+    //     }
 
-        // Create or reuse the DocumentTypeEntity
-        DocumentTypeEntity docType;
-        if (existingType != null) {
-            docType = existingType;
-        } else {
-            docType = DocumentTypeEntity.builder()
-                    .name(request.getName().trim())
-                    .code(code)
-                    .description(request.getDescription())
-                    .active(true)
-                    .build();
-            docType = documentTypeRepository.save(docType);
-        }
+    //     // Create model mapping
+    //     ModelDocumentType mapping = ModelDocumentType.builder()
+    //             .modelType(modelType)
+    //             .documentType(docType)
+    //             .required(request.isRequired())
+    //             .active(true)
+    //             .displayOrder(request.getDisplayOrder())
+    //             .build();
+    //     mapping = modelDocumentTypeRepository.save(mapping);
 
-        // Create model mapping
-        ModelDocumentType mapping = ModelDocumentType.builder()
-                .modelType(modelType)
-                .documentType(docType)
-                .required(request.isRequired())
-                .active(true)
-                .displayOrder(request.getDisplayOrder())
-                .build();
-        mapping = modelDocumentTypeRepository.save(mapping);
-
-        log.info("Created document type '{}' and assigned to {}", docType.getName(), modelType);
-        return toConfigResponse(mapping);
-    }
+    //     log.info("Created document type '{}' and assigned to {}", docType.getName(), modelType);
+    //     return toConfigResponse(mapping);
+    // }
 
     // ── Remove mapping (soft delete) ─────────────────────────────────────────
 
@@ -141,10 +146,44 @@ public class DocumentTypeService {
         return toConfigResponse(mapping);
     }
 
+    // ── Rename a document type (via mapping) ─────────────────────────────────
+
+    // @Transactional
+    // public DocumentTypeConfigResponse renameDocumentType(Long mappingId, String newName) {
+    //     if (newName == null || newName.trim().isEmpty()) {
+    //         throw new BusinessException("INVALID_NAME", "Document type name cannot be empty");
+    //     }
+    //     newName = newName.trim();
+    //     if (newName.length() > 100) {
+    //         throw new BusinessException("INVALID_NAME", "Name must be at most 100 characters");
+    //     }
+
+    //     ModelDocumentType mapping = modelDocumentTypeRepository.findByIdAndDeletedFalse(mappingId)
+    //             .orElseThrow(() -> new ResourceNotFoundException("Document type mapping not found"));
+
+    //     DocumentTypeEntity docType = mapping.getDocumentType();
+    //     String newCode = toCode(newName);
+
+    //     // Check if new code conflicts with another existing type
+    //     documentTypeRepository.findByCodeAndDeletedFalse(newCode).ifPresent(existing -> {
+    //         if (!existing.getId().equals(docType.getId())) {
+    //             throw new BusinessException("DUPLICATE_DOCUMENT_TYPE",
+    //                     "A document type with name '" + newName + "' already exists");
+    //         }
+    //     });
+
+    //     docType.setName(newName);
+    //     docType.setCode(newCode);
+    //     documentTypeRepository.save(docType);
+
+    //     log.info("Renamed document type {} to '{}'", docType.getId(), newName);
+    //     return toConfigResponse(mapping);
+    // }
+
     // ── Soft delete a document type globally ─────────────────────────────────
 
     @Transactional
-    public void deleteDocumentType(Long documentTypeId) {
+    public void deleteDocumentType(UUID documentTypeId) {
         DocumentTypeEntity docType = documentTypeRepository.findByIdAndDeletedFalse(documentTypeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Document type not found"));
 
@@ -177,6 +216,7 @@ public class DocumentTypeService {
         return DocumentTypeConfigResponse.builder()
                 .id(mapping.getId())
                 .documentTypeId(dt.getId())
+                .modelType(mapping.getModelType().name())
                 .name(dt.getName())
                 .code(dt.getCode())
                 .description(dt.getDescription())
@@ -199,7 +239,7 @@ public class DocumentTypeService {
             return UserModelType.valueOf(value.toUpperCase());
         } catch (IllegalArgumentException e) {
             throw new BusinessException("INVALID_MODEL_TYPE",
-                    "Invalid model type: " + value + ". Allowed: DOCTOR, PHARMACIST, AGENT");
+                    "Invalid model type: " + value + ". Allowed: DOCTOR, PHARMACIST, AGENT, PATIENT");
         }
     }
 }

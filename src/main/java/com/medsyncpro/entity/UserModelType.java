@@ -8,5 +8,6 @@ package com.medsyncpro.entity;
 public enum UserModelType {
     DOCTOR,
     PHARMACIST,
-    AGENT
+    AGENT,
+    PATIENT
 }

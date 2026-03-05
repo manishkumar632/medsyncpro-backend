@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Admin-facing response for document type configuration per model.
@@ -18,7 +19,9 @@ public class DocumentTypeConfigResponse {
     /** ModelDocumentType mapping ID */
     private Long id;
     /** DocumentTypeEntity ID */
-    private Long documentTypeId;
+    private UUID documentTypeId;
+    /** The user model this config is assigned to */
+    private String modelType;
     private String name;
     private String code;
     private String description;

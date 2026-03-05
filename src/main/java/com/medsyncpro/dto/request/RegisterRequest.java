@@ -25,5 +25,5 @@ public class RegisterRequest {
     private Role role;
     
     @AssertTrue(message = "Please accept terms and condition")
-    private Boolean termsAccepted;
+    private boolean termsAccepted;
 }

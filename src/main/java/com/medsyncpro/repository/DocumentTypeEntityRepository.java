@@ -6,15 +6,16 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
-public interface DocumentTypeEntityRepository extends JpaRepository<DocumentTypeEntity, Long> {
+public interface DocumentTypeEntityRepository extends JpaRepository<DocumentTypeEntity, UUID> {
 
     List<DocumentTypeEntity> findByDeletedFalse();
 
     Optional<DocumentTypeEntity> findByCodeAndDeletedFalse(String code);
 
-    Optional<DocumentTypeEntity> findByIdAndDeletedFalse(Long id);
+    Optional<DocumentTypeEntity> findByIdAndDeletedFalse(UUID id);
 
     boolean existsByNameIgnoreCaseAndDeletedFalse(String name);
 

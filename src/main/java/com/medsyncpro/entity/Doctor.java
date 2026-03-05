@@ -53,4 +53,6 @@ public class Doctor extends BaseEntity {
     @Builder.Default
     @Column(nullable = false)
     private boolean isVerified = false;
+
+    
 }
