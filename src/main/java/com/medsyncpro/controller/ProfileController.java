@@ -8,7 +8,6 @@ import com.medsyncpro.entity.User;
 import com.medsyncpro.entity.UserModelType;
 import com.medsyncpro.exception.BusinessException;
 import com.medsyncpro.response.ApiResponse;
-import com.medsyncpro.service.DocumentTypeService;
 import com.medsyncpro.service.ProfileService;
 import com.medsyncpro.utils.Utils;
 
@@ -31,7 +30,7 @@ import com.medsyncpro.dto.response.LoginResponse;
 public class ProfileController {
 
     private final ProfileService profileService;
-    private final DocumentTypeService documentTypeService;
+    // private final DocumentTypeService documentTypeService;
     private final Utils utils;
 
     /**
@@ -107,17 +106,17 @@ public class ProfileController {
      * GET /api/users/me/document-types — returns active document types for the
      * authenticated user's model.
      */
-    @GetMapping("/me/document-types")
-    public ResponseEntity<ApiResponse<List<DocumentTypeConfigResponse>>> getMyDocumentTypes(
-            Authentication authentication) {
-        User user = utils.getUserFromAuth(authentication);
-        UserModelType modelType = ProfileService.roleToModelType(user.getRole());
-        if (modelType == null) {
-            return ResponseEntity.ok(ApiResponse.success(Collections.emptyList(), "No document types for this role"));
-        }
-        List<DocumentTypeConfigResponse> configs = documentTypeService.getActiveDocumentTypesForModel(modelType);
-        return ResponseEntity.ok(ApiResponse.success(configs, "Document types retrieved"));
-    }
+    // @GetMapping("/me/document-types")
+    // public ResponseEntity<ApiResponse<List<DocumentTypeConfigResponse>>> getMyDocumentTypes(
+    //         Authentication authentication) {
+    //     User user = utils.getUserFromAuth(authentication);
+    //     UserModelType modelType = ProfileService.roleToModelType(user.getRole());
+    //     if (modelType == null) {
+    //         return ResponseEntity.ok(ApiResponse.success(Collections.emptyList(), "No document types for this role"));
+    //     }
+    //     List<DocumentTypeConfigResponse> configs = documentTypeService.getActiveDocumentTypesForModel(modelType);
+    //     return ResponseEntity.ok(ApiResponse.success(configs, "Document types retrieved"));
+    // }
 
     /**
      * POST /api/users/me/documents/{documentTypeId} — upload a single document by

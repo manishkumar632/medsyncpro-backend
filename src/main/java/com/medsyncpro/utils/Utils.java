@@ -4,6 +4,7 @@ import org.springframework.security.core.Authentication;
 
 import com.medsyncpro.entity.User;
 import com.medsyncpro.exception.BusinessException;
+import com.medsyncpro.exception.ResourceNotFoundException;
 import com.medsyncpro.repository.UserRepository;
 
 import org.springframework.stereotype.Component;
@@ -20,8 +21,8 @@ public class Utils {
         }
 
         String email = authentication.getName();
-        User user = userRepository.findByEmail(email);
-
+        User user = userRepository.findByEmail(email)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         if (user == null) {
             throw new BusinessException("USER_NOT_FOUND", "User not found");
         }

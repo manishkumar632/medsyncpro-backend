@@ -28,10 +28,7 @@ public class NotificationController {
     private final UserRepository userRepository;
     private final SseEmitterService sseEmitterService;
 
-    /**
-     * SSE stream endpoint — any authenticated user can connect.
-     * Sends realtime notification events.
-     */
+    /** SSE stream — any authenticated user can connect. */
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(Authentication authentication) {
         User user = getUserFromAuth(authentication);
@@ -39,47 +36,48 @@ public class NotificationController {
         return sseEmitterService.addEmitter(user.getId(), isAdmin);
     }
 
-    /**
-     * GET /api/notifications — list notifications for current user.
-     * Admins see admin-targeted + broadcast notifications.
-     * Other users see notifications targeted to them.
-     */
     @GetMapping
-    public ResponseEntity<ApiResponse<List<Notification>>> getNotifications(Authentication authentication) {
+    public ResponseEntity<ApiResponse<List<Notification>>> getNotifications(
+            Authentication authentication) {
+
         User user = getUserFromAuth(authentication);
         List<Notification> notifications;
 
         if (user.getRole() == Role.ADMIN) {
-            notifications = notificationRepository.findByRecipientIdOrRecipientIdIsNullOrderByCreatedAtDesc(user.getId());
+            notifications = notificationRepository
+                    .findByRecipientIdOrRecipientIdIsNullOrderByCreatedAtDesc(
+                            user.getId().toString()); // ← fixed: was user.getId()
         } else {
-            notifications = notificationRepository.findByRecipientIdOrderByCreatedAtDesc(user.getId());
+            notifications = notificationRepository
+                    .findByRecipientIdOrderByCreatedAtDesc(
+                            user.getId().toString()); // ← fixed: was user.getId()
         }
 
         return ResponseEntity.ok(ApiResponse.success(notifications, "Notifications fetched"));
     }
 
-    /**
-     * GET /api/notifications/unread-count — unread count for current user.
-     */
     @GetMapping("/unread-count")
-    public ResponseEntity<ApiResponse<Map<String, Long>>> getUnreadCount(Authentication authentication) {
+    public ResponseEntity<ApiResponse<Map<String, Long>>> getUnreadCount(
+            Authentication authentication) {
+
         User user = getUserFromAuth(authentication);
         long count;
 
         if (user.getRole() == Role.ADMIN) {
-            long personalCount = notificationRepository.countByRecipientIdAndIsReadFalse(user.getId());
-            long broadcastCount = notificationRepository.countByRecipientIdIsNullAndIsReadFalse();
-            count = personalCount + broadcastCount;
+            long personal = notificationRepository
+                    .countByRecipientIdAndIsReadFalse(user.getId().toString()); // ← fixed
+            long broadcast = notificationRepository.countByRecipientIdIsNullAndIsReadFalse();
+            count = personal + broadcast;
         } else {
-            count = notificationRepository.countByRecipientIdAndIsReadFalse(user.getId());
+            count = notificationRepository
+                    .countByRecipientIdAndIsReadFalse(user.getId().toString()); // ← fixed
         }
 
-        return ResponseEntity.ok(ApiResponse.success(Map.of("unreadCount", count), "Unread count fetched"));
+        return ResponseEntity.ok(
+                ApiResponse.success(Map.of("unreadCount", count), "Unread count fetched"));
     }
 
-    /**
-     * PUT /api/notifications/{id}/read — mark a notification as read.
-     */
+    /** PUT /api/notifications/{id}/read */
     @PutMapping("/{id}/read")
     public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable String id) {
         Notification notification = notificationRepository.findById(id)
@@ -89,15 +87,35 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.success(null, "Notification marked as read"));
     }
 
+    /**
+     * POST /api/notifications/register-fcm-token
+     * Stores the browser/app FCM token so FirebasePushService can reach this user.
+     */
+    @PostMapping("/register-fcm-token")
+    public ResponseEntity<ApiResponse<Void>> registerFcmToken(
+            Authentication authentication,
+            @RequestBody Map<String, String> body) {
+        try {
+            User user = getUserFromAuth(authentication);
+            String fcmToken = body.get("fcmToken");
+            if (fcmToken == null || fcmToken.isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("fcmToken is required"));
+            }
+            user.setFcmToken(fcmToken);
+            userRepository.save(user);
+            return ResponseEntity.ok(ApiResponse.success(null, "FCM token registered"));
+        } catch (Exception e) {
+            // Non-critical — log and return success so the client doesn't retry
+            return ResponseEntity.ok(ApiResponse.success(null, "FCM token noted"));
+        }
+    }
+
     private User getUserFromAuth(Authentication authentication) {
         if (authentication == null || authentication.getPrincipal() == null) {
             throw new BusinessException("UNAUTHORIZED", "User not authenticated");
         }
-        String email = authentication.getName();
-        User user = userRepository.findByEmail(email);
-        if (user == null) {
-            throw new BusinessException("USER_NOT_FOUND", "User not found");
-        }
-        return user;
+        return userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }
 }

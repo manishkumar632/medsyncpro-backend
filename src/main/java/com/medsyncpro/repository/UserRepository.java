@@ -2,6 +2,7 @@ package com.medsyncpro.repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.medsyncpro.entity.Role;
@@ -23,9 +24,13 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
        boolean existsByRoleAndDeletedFalse(Role role);
 
-       User findByEmail(String email);
+       Optional<User> findByEmail(String email);
 
        long countByRoleAndDeletedFalse(Role role);
+
+       Page<User> findByRole(Role role, Pageable pageable);
+
+       Page<User> findByRoleAndEmailContainingIgnoreCase(Role role, String email, Pageable pageable);
 
        @Query("""
                      SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END
@@ -40,6 +45,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
                      FROM User u
                      WHERE u.email = :email
                      AND u.createdAt > :since
+                     AND u.deleted = false
                             """)
        long countRecentRegistrationsByEmail(
                      @Param("email") String email,

@@ -97,7 +97,7 @@ public class UserProfileHelper {
 
     public VerificationStatus getVerificationStatus(User user) {
         if (user == null) return VerificationStatus.UNVERIFIED;
-        return verificationReqRepo.findByUserId(String.valueOf(user.getId()))
+        return verificationReqRepo.findByUserId(user.getId())
                 .map(VerificationRequest::getStatus)
                 .orElse(VerificationStatus.UNVERIFIED);
     }

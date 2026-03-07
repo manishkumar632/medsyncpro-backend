@@ -30,7 +30,8 @@ public class DoctorSettingsController {
     // JWT sets auth.getName() = email, not userId. Resolve it.
     private UUID getUserId(Authentication auth) {
         String email = auth.getName();
-        User user = userRepository.findByEmail(email);
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         if (user == null) throw new ResourceNotFoundException("User not found");
         return user.getId();
     }

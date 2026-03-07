@@ -2,8 +2,10 @@ package com.medsyncpro.controller;
 
 import com.medsyncpro.dto.doctor.DoctorPublicProfile;
 import com.medsyncpro.dto.doctor.DoctorSearchResult;
+import com.medsyncpro.dto.response.SlotResponse;
 import com.medsyncpro.response.ApiResponse;
 import com.medsyncpro.service.DoctorSearchService;
+import com.medsyncpro.service.PatientService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -12,32 +14,19 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/doctors")
 @RequiredArgsConstructor
 public class DoctorSearchController {
 
     private final DoctorSearchService doctorSearchService;
+    private final PatientService patientService;
 
     // ──────────────────────────────────────────────────────────────
     // GET /api/doctors/search
-    //
-    // Search for doctors across multiple fields.
-    //
-    // Query params:
-    // q – search term (name / email / phone / specialty / clinic / city)
-    // leave blank to get all verified doctors
-    // page – 0-indexed page number (default: 0)
-    // size – page size (default: 10, max: 50)
-    // sort – field to sort by (default: name)
-    // direction– asc | desc (default: asc)
-    //
-    // Access: PUBLIC (no authentication required)
-    //
-    // Example:
-    // GET /api/doctors/search?q=cardio&page=0&size=10
-    // GET /api/doctors/search?q=Dr+Smith&sort=consultationFee&direction=asc
-    // GET /api/doctors/search ← returns all verified doctors, page 0
     // ──────────────────────────────────────────────────────────────
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<Page<DoctorSearchResult>>> searchDoctors(
@@ -47,7 +36,6 @@ public class DoctorSearchController {
             @RequestParam(defaultValue = "name") String sort,
             @RequestParam(defaultValue = "asc") String direction) {
 
-        // Cap page size to prevent abuse
         int safeSize = Math.min(size, 50);
 
         Sort.Direction sortDir = "desc".equalsIgnoreCase(direction)
@@ -66,15 +54,6 @@ public class DoctorSearchController {
 
     // ──────────────────────────────────────────────────────────────
     // GET /api/doctors/{id}
-    //
-    // Fetch the full public profile of a single doctor.
-    // Returns 404 if the doctor doesn't exist, is deleted, or has
-    // set their profile to private.
-    //
-    // Access: PUBLIC (no authentication required)
-    //
-    // Example:
-    // GET /api/doctors/a1b2c3d4-e5f6-7890-abcd-ef1234567890
     // ──────────────────────────────────────────────────────────────
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<DoctorPublicProfile>> getDoctorProfile(
@@ -82,5 +61,25 @@ public class DoctorSearchController {
 
         DoctorPublicProfile profile = doctorSearchService.getDoctorProfile(id);
         return ResponseEntity.ok(ApiResponse.success(profile, "Doctor profile retrieved successfully"));
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // GET /api/doctors/{id}/slots
+    //
+    // Generate available appointment slots for a doctor based on
+    // their weekly schedule and existing bookings.
+    //
+    // Query params:
+    // type – consultation type filter (VIDEO, IN_PERSON, CHAT)
+    //
+    // Access: PUBLIC (authenticated patients use this)
+    // ──────────────────────────────────────────────────────────────
+    @GetMapping("/{id}/slots")
+    public ResponseEntity<ApiResponse<List<SlotResponse>>> getAvailableSlots(
+            @PathVariable String id,
+            @RequestParam(required = false, defaultValue = "VIDEO") String type) {
+
+        List<SlotResponse> slots = patientService.getAvailableSlots(UUID.fromString(id), type);
+        return ResponseEntity.ok(ApiResponse.success(slots, "Available slots retrieved"));
     }
 }

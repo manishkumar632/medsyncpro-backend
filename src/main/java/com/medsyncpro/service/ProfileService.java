@@ -4,8 +4,6 @@ import com.medsyncpro.dto.response.ProfileResponse;
 import com.medsyncpro.dto.response.RequiredDocumentItem;
 import com.medsyncpro.dto.request.UpdateProfileRequest;
 import com.medsyncpro.entity.Document;
-import com.medsyncpro.entity.DocumentTypeEntity;
-import com.medsyncpro.entity.ModelDocumentType;
 import com.medsyncpro.entity.Role;
 import com.medsyncpro.entity.User;
 import com.medsyncpro.entity.UserModelType;
@@ -15,8 +13,6 @@ import com.medsyncpro.exception.BusinessException;
 import com.medsyncpro.exception.ResourceNotFoundException;
 import com.medsyncpro.mapper.ProfileMapper;
 import com.medsyncpro.repository.DocumentRepository;
-import com.medsyncpro.repository.DocumentTypeEntityRepository;
-import com.medsyncpro.repository.ModelDocumentTypeRepository;
 import com.medsyncpro.repository.UserRepository;
 import com.medsyncpro.repository.VerificationRequestRepository;
 import lombok.RequiredArgsConstructor;
@@ -39,8 +35,6 @@ public class ProfileService {
     private final UserRepository userRepository;
     private final UserProfileHelper userProfileHelper;
     private final DocumentRepository documentRepository;
-    private final DocumentTypeEntityRepository documentTypeEntityRepository;
-    private final ModelDocumentTypeRepository modelDocumentTypeRepository;
     private final VerificationRequestRepository verificationRequestRepository;
     private final FileStorageService fileStorageService;
     private final ApplicationEventPublisher eventPublisher;
@@ -473,16 +467,16 @@ public class ProfileService {
     //     return documentRepository.findByUserId(String.valueOf(user.getId()));
     // }
 
-    private DocumentTypeEntity resolveDocumentType(String typeStr) {
-        if (typeStr == null || typeStr.trim().isEmpty()) {
-            return documentTypeEntityRepository.findByCodeAndDeletedFalse("OTHER")
-                    .orElseThrow(() -> new BusinessException("MISSING_DEFAULT_TYPE",
-                            "Default document type 'OTHER' not found in database"));
-        }
-        return documentTypeEntityRepository.findByCodeAndDeletedFalse(typeStr.toUpperCase())
-                .orElseThrow(() -> new BusinessException("INVALID_DOCUMENT_TYPE",
-                        "Unknown document type code: " + typeStr));
-    }
+    // private DocumentTypeEntity resolveDocumentType(String typeStr) {
+    //     if (typeStr == null || typeStr.trim().isEmpty()) {
+    //         return documentTypeEntityRepository.findByCodeAndDeletedFalse("OTHER")
+    //                 .orElseThrow(() -> new BusinessException("MISSING_DEFAULT_TYPE",
+    //                         "Default document type 'OTHER' not found in database"));
+    //     }
+    //     return documentTypeEntityRepository.findByCodeAndDeletedFalse(typeStr.toUpperCase())
+    //             .orElseThrow(() -> new BusinessException("INVALID_DOCUMENT_TYPE",
+    //                     "Unknown document type code: " + typeStr));
+    // }
 
     /**
      * Maps Role enum to UserModelType for verification document lookup.

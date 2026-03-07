@@ -3,6 +3,7 @@ package com.medsyncpro.controller;
 import com.medsyncpro.dto.request.LoginRequest;
 import com.medsyncpro.dto.request.RegisterRequest;
 import com.medsyncpro.dto.response.LoginResponse;
+import com.medsyncpro.dto.response.RegisterResponse;
 import com.medsyncpro.entity.RefreshToken;
 import com.medsyncpro.entity.User;
 import com.medsyncpro.exception.BusinessException;
@@ -55,10 +56,10 @@ public class AuthController {
     // ==================== REGISTER ====================
     
     @PostMapping("/register")
-    public ResponseEntity<ApiResponse<User>> register(@Valid @RequestBody RegisterRequest request) {
-        User user = userService.register(request);
+    public ResponseEntity<ApiResponse<RegisterResponse>> register(@Valid @RequestBody RegisterRequest request) {
+        RegisterResponse response = authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(user, "User registered successfully. Please verify your email"));
+                .body(ApiResponse.success(response, "Registration successful. Please check your email to verify your account"));
     }
     
     // ==================== LOGIN ====================
@@ -78,46 +79,13 @@ public class AuthController {
     // ==================== REFRESH TOKEN ====================
     
     @PostMapping("/refresh")
-public ResponseEntity<ApiResponse<LoginResponse>> refreshToken(
-        HttpServletRequest request,
-        HttpServletResponse response) {
-
-    String refreshTokenStr = extractCookieValue(request, "refresh_token");
-
-    if (refreshTokenStr == null) {
-        throw new BusinessException(
-                "MISSING_REFRESH_TOKEN",
-                "Refresh token cookie is missing. Please login again");
+    public ResponseEntity<ApiResponse<LoginResponse>> refreshToken(
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        
+        ApiResponse<LoginResponse> loginResponse = authService.refreshToken(request, response);
+        return ResponseEntity.ok(loginResponse);
     }
-
-    // Validate & rotate (this revokes old token internally)
-    User user = refreshTokenService.validateAndRotate(refreshTokenStr);
-
-    String deviceInfo = request.getHeader("User-Agent");
-
-    // Generate new access token
-    String newAccessToken =
-            jwtService.generateAccessToken(user, deviceInfo);
-
-    // Create new refresh token
-    String newRefreshToken =
-            refreshTokenService.createRefreshToken(user, deviceInfo);
-
-    // Set cookies
-    addAccessTokenCookie(response, newAccessToken);
-    addRefreshTokenCookie(response, newRefreshToken);
-
-    LoginResponse loginResponse = LoginResponse.builder()
-            .email(user.getEmail())
-            .role(user.getRole())
-            .emailVerified(user.isEmailVerified())
-            .phoneVerified(user.isPhoneVerified())
-            .phone(user.getPhone())
-            .build();
-
-    return ResponseEntity.ok(
-            ApiResponse.success(loginResponse, "Token refreshed successfully"));
-}
     
     // ==================== LOGOUT (Current Device) ====================
     

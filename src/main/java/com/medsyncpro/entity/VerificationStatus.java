@@ -5,5 +5,6 @@ public enum VerificationStatus {
     DOCUMENT_SUBMITTED,
     UNDER_REVIEW,
     VERIFIED,
-    REJECTED
+    REJECTED,
+    RESUBMIT_REQUESTED
 }

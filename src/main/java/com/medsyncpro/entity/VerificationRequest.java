@@ -9,21 +9,19 @@ import java.util.UUID;
 @Table(name = "verification_requests")
 @Data
 public class VerificationRequest {
+
     @Id
     @Column(length = 36, updatable = false, nullable = false)
     private String id;
 
     @PrePersist
     public void generateId() {
-        if (this.id == null) {
+        if (this.id == null)
             this.id = UUID.randomUUID().toString();
-        }
-        if (this.createdAt == null) {
+        if (this.createdAt == null)
             this.createdAt = LocalDateTime.now();
-        }
-        if (this.updatedAt == null) {
+        if (this.updatedAt == null)
             this.updatedAt = LocalDateTime.now();
-        }
     }
 
     @PreUpdate
@@ -39,8 +37,12 @@ public class VerificationRequest {
     @Column(nullable = false)
     private VerificationStatus status = VerificationStatus.UNVERIFIED;
 
+    /** Admin review notes / rejection reason. */
     @Column(length = 1000)
     private String reviewNotes;
+
+    @Column(length = 500)
+    private String requestedDocumentTypes;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

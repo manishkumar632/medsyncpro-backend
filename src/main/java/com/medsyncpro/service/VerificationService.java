@@ -3,6 +3,7 @@ package com.medsyncpro.service;
 import com.medsyncpro.entity.User;
 import com.medsyncpro.entity.VerificationToken;
 import com.medsyncpro.exception.BusinessException;
+import com.medsyncpro.exception.ResourceNotFoundException;
 import com.medsyncpro.repository.UserRepository;
 import com.medsyncpro.repository.VerificationTokenRepository;
 import lombok.RequiredArgsConstructor;
@@ -100,7 +101,8 @@ public class VerificationService {
     
     @Transactional
     public void resendVerificationEmail(String email) {
-        User user = userRepository.findByEmail(email);
+        User user = userRepository.findByEmail(email)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         
         if (user == null || user.getDeleted()) {
             // Don't reveal if email exists (prevent enumeration)

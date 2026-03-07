@@ -1,5 +1,6 @@
 package com.medsyncpro.repository;
 
+import com.medsyncpro.entity.User;
 import com.medsyncpro.entity.VerificationRequest;
 import com.medsyncpro.entity.VerificationStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -7,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 public interface VerificationRequestRepository
@@ -22,5 +24,7 @@ public interface VerificationRequestRepository
 
     List<VerificationRequest> findAllByOrderByCreatedAtDesc();
 
-    Optional<VerificationRequest> findByUserId(String userId);
+    Optional<VerificationRequest> findTopByUserOrderByCreatedAtDesc(User user);
+
+    Optional<VerificationRequest> findByUserId(UUID userId);
 }

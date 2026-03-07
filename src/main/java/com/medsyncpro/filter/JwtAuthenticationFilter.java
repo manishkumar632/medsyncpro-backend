@@ -1,6 +1,7 @@
 package com.medsyncpro.filter;
 
 import com.medsyncpro.entity.User;
+import com.medsyncpro.exception.ResourceNotFoundException;
 import com.medsyncpro.repository.UserRepository;
 import com.medsyncpro.service.JwtService;
 import com.medsyncpro.service.TokenBlacklistService;
@@ -63,7 +64,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             Integer tokenVersion = jwtService.extractTokenVersion(claims);
             
             if (email != null) {
-                User user = userRepository.findByEmail(email);
+                User user = userRepository.findByEmail(email)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
                 if (user == null || user.getDeleted()) {
                     sendUnauthorizedResponse(response, "User not found or deleted");
                     return;

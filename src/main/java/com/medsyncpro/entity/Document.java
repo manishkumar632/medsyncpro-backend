@@ -12,6 +12,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "documents", indexes = {
         @Index(name = "idx_document_user_id", columnList = "user_id"),
+        @Index(name = "idx_document_type", columnList = "document_type")
 })
 @Getter
 @Setter
@@ -28,25 +29,23 @@ public class Document extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "document_type_id", nullable = true)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "document_type_id", nullable = false)
     private DocumentType documentType;
 
-    @Column(nullable = false)
-    private String name;
+    @Column(name = "file_url", nullable = false, length = 500)
+    private String fileUrl;
 
-    @Column(nullable = false)
-    private String url;
+    @Column(name = "public_id", length = 255)
+    private String publicId;
 
-    @Column(nullable = false)
-    private Long size;
+    @Column(name = "file_name", length = 255)
+    private String fileName;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
-    private FileType fileType;
+    @Column(name = "file_size")
+    private Long fileSize;
 
-    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
     @Builder.Default
-    @Column(nullable = false, length = 25)
-    private Status status = Status.PENDING;
+    private String status = "UPLOADED";
 }

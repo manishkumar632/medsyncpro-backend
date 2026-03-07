@@ -32,12 +32,13 @@ public class Doctor extends BaseEntity {
     private String name;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "speciality_id", nullable = false)
+    @JoinColumn(name = "speciality_id", nullable = true)
     private Speciality specialization;
     
     private String licenseNumber;
     
-    private Integer experienceYears;
+    @Builder.Default
+    private int experienceYears = 0;
     
     private String qualification;
     
@@ -48,7 +49,8 @@ public class Doctor extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String bio;
     
-    private Double consultationFee;
+    @Builder.Default
+    private double consultationFee = 0.0;
 
     @Builder.Default
     @Column(nullable = false)

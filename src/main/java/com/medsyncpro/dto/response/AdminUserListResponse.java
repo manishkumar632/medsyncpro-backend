@@ -27,4 +27,5 @@ public class AdminUserListResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<DocumentResponse> documents;
+    private String professionalVerificationStatus;
 }

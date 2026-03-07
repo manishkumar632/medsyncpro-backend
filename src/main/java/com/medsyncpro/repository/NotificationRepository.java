@@ -5,12 +5,22 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.UUID;
 
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, String> {
-    List<Notification> findByRecipientIdOrRecipientIdIsNullOrderByCreatedAtDesc(UUID recipientId);
-    List<Notification> findByRecipientIdOrderByCreatedAtDesc(UUID recipientId);
-    long countByRecipientIdAndIsReadFalse(UUID recipientId);
+
+    // Admins: own notifications + broadcast (recipientId IS NULL)
+    List<Notification> findByRecipientIdOrRecipientIdIsNullOrderByCreatedAtDesc(
+            String recipientId); // ← was UUID
+
+    // Other roles: only their own notifications
+    List<Notification> findByRecipientIdOrderByCreatedAtDesc(
+            String recipientId); // ← was UUID
+
+    // Unread count for a specific user
+    long countByRecipientIdAndIsReadFalse(
+            String recipientId); // ← was UUID
+
+    // Unread count for broadcast notifications (admin)
     long countByRecipientIdIsNullAndIsReadFalse();
 }
