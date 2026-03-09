@@ -4,7 +4,6 @@ import com.medsyncpro.dto.request.LoginRequest;
 import com.medsyncpro.dto.request.RegisterRequest;
 import com.medsyncpro.dto.response.LoginResponse;
 import com.medsyncpro.dto.response.RegisterResponse;
-import com.medsyncpro.entity.RefreshToken;
 import com.medsyncpro.entity.User;
 import com.medsyncpro.exception.BusinessException;
 import com.medsyncpro.response.ApiResponse;
@@ -219,7 +218,7 @@ public class AuthController {
         org.springframework.http.ResponseCookie cookie = org.springframework.http.ResponseCookie.from("refresh_token", token)
                 .httpOnly(true)
                 .secure(true)
-                .path("/api/auth")
+                .path("/")
                 .maxAge(refreshExpiration / 1000)
                 .sameSite("None")
                 .build();
@@ -241,7 +240,7 @@ public class AuthController {
         org.springframework.http.ResponseCookie cookie = org.springframework.http.ResponseCookie.from("refresh_token", "")
                 .httpOnly(true)
                 .secure(true)
-                .path("/api/auth")
+                .path("/")
                 .maxAge(0)
                 .sameSite("None")
                 .build();

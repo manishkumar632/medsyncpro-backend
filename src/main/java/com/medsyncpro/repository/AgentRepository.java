@@ -14,4 +14,6 @@ public interface AgentRepository extends JpaRepository<Agent, UUID> {
 
     long countByIsVerifiedFalseAndDeletedFalse();
     java.util.Optional<Agent> findByUser(com.medsyncpro.entity.User user);
+
+    Optional<Agent> findByUserId(UUID userId);
 }

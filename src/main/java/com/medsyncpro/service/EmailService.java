@@ -167,6 +167,21 @@ public class EmailService {
 
     // ─── Private helper ───────────────────────────────────────────────────────
 
+    @Async
+    public void sendGenericNotificationEmail(String email, String displayName, String subject, String message) {
+        String safeName = (displayName != null && !displayName.isBlank()) ? displayName : "User";
+        String html = """
+                <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
+                  <h2 style="color:#0d9488">%s</h2>
+                  <p>Hi %s,</p>
+                  <p>%s</p>
+                  <p style="margin-top:24px;color:#64748b;font-size:13px">
+                    This is an automated update from MedSyncPro.
+                  </p>
+                </div>
+                """.formatted(subject, safeName, message);
+        send(email, subject, html);
+    }
     private void send(String toEmail, String subject, String htmlContent) {
         try {
             RestTemplate restTemplate = new RestTemplate();

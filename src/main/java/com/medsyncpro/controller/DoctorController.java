@@ -12,6 +12,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import com.medsyncpro.dto.request.DoctorDocumentUploadRequest;
+import com.medsyncpro.dto.request.AppointmentRescheduleRequest;
 import com.medsyncpro.dto.request.SignatureRequestDTO;
 import com.medsyncpro.dto.response.AppointmentResponse;
 import com.medsyncpro.dto.response.DoctorProfileResponseDTO;
@@ -55,6 +56,21 @@ public class DoctorController {
         Page<AppointmentResponse> appointments = doctorService.getDoctorAppointments(
                 user.getId(), PageRequest.of(page, Math.min(size, 100)));
         return ResponseEntity.ok(ApiResponse.success(appointments, "Appointments retrieved"));
+    }
+
+
+    @GetMapping("/patients")
+    public ResponseEntity<ApiResponse<Page<Map<String, Object>>>> getMyPatients(
+            Authentication authentication,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        User user = getUser(authentication);
+        Page<Map<String, Object>> patients = doctorService.getDoctorPatients(
+                user.getId(), search, PageRequest.of(page, size));
+
+        return ResponseEntity.ok(ApiResponse.success(patients, "Patients retrieved successfully"));
     }
 
     @PatchMapping("/appointments/{id}/approve")
@@ -111,6 +127,20 @@ public class DoctorController {
         }
     }
 
+    @PatchMapping("/appointments/{id}/reschedule")
+    public ResponseEntity<ApiResponse<AppointmentResponse>> rescheduleAppointment(
+            Authentication authentication,
+            @PathVariable UUID id,
+            @RequestBody AppointmentRescheduleRequest request) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success(
+                    doctorService.rescheduleAppointment(getUser(authentication).getId(), id, request),
+                    "Appointment rescheduled"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
     @PostMapping("/appointments/{id}/notes")
     public ResponseEntity<ApiResponse<AppointmentResponse>> saveNotes(
             Authentication authentication,
@@ -124,6 +154,34 @@ public class DoctorController {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
+
+    // Paste this inside your DoctorController class
+    @GetMapping("/prescriptions")
+    public ResponseEntity<ApiResponse<Page<Map<String, Object>>>> getMyPrescriptions(
+            Authentication authentication,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        User user = getUser(authentication);
+        Page<Map<String, Object>> prescriptions = doctorService.getDoctorPrescriptions(
+                user.getId(), search, PageRequest.of(page, size));
+
+        return ResponseEntity.ok(ApiResponse.success(prescriptions, "Prescriptions retrieved successfully"));
+    }
+
+
+    @GetMapping("/patients/{patientId}/appointments")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getPatientAppointments(
+            Authentication authentication,
+            @PathVariable UUID patientId) {
+        User user = getUser(authentication);
+        List<Map<String, Object>> appointments = doctorService.getPatientAppointmentsForDoctor(user.getId(), patientId);
+        return ResponseEntity.ok(ApiResponse.success(appointments,
+                "Patient appointments retrieved successfully"));
+    }
+
+    
 
     @PostMapping("/appointments/{id}/prescription")
     public ResponseEntity<ApiResponse<AppointmentResponse>> savePrescription(

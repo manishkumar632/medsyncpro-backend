@@ -17,6 +17,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -91,5 +92,19 @@ public class PatientController {
     private User getUser(Authentication authentication) {
         return userRepository.findByEmail(authentication.getName())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    }
+
+
+    @GetMapping("/prescriptions")
+    public ResponseEntity<ApiResponse<Page<Map<String, Object>>>> getMyPrescriptions(
+            Authentication authentication,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size) {
+
+        User user = getUser(authentication);
+        Page<Map<String, Object>> prescriptions = patientService.getPatientPrescriptions(user.getId(),
+                PageRequest.of(page, size));
+
+        return ResponseEntity.ok(ApiResponse.success(prescriptions, "Prescriptions retrieved successfully"));
     }
 }

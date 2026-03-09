@@ -2,10 +2,14 @@ package com.medsyncpro.service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.Set;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -15,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.medsyncpro.dto.request.AppointmentRescheduleRequest;
 import com.medsyncpro.dto.request.DoctorDocumentUploadRequest;
 import com.medsyncpro.dto.response.AppointmentResponse;
 import com.medsyncpro.dto.response.DoctorProfileResponseDTO;
@@ -45,6 +50,8 @@ public class DoctorService {
         private final ApplicationEventPublisher eventPublisher;
         private final AuditLogService auditLogService;
         private final PrescriptionRepository prescriptionRepository;
+        private final NotificationDispatchService notificationDispatchService;
+        private final PatientRepository patientRepository;
 
         private final FileStorageService fileStorageService;
 
@@ -98,6 +105,178 @@ public class DoctorService {
                 return new PageImpl<>(responses, pageable, page.getTotalElements());
         }
 
+
+        @Transactional(readOnly = true)
+        public Page<Map<String, Object>> getDoctorPatients(UUID doctorUserId, String search, Pageable pageable) {
+                // Fetch all appointments for the doctor
+                List<Appointment> appointments = appointmentRepository
+                                .findByDoctorUserIdOrderByScheduledDateDescScheduledTimeDesc(doctorUserId,
+                                                Pageable.unpaged())
+                                .getContent();
+
+                List<Map<String, Object>> patientList = new ArrayList<>();
+                Set<UUID> seenPatientIds = new HashSet<>();
+
+                for (Appointment appt : appointments) {
+                        Patient patient = appt.getPatient();
+                        if (patient == null || seenPatientIds.contains(patient.getId()))
+                                continue;
+
+                        // Apply search filter
+                        if (search != null && !search.trim().isEmpty()) {
+                                boolean nameMatch = patient.getName() != null
+                                                && patient.getName().toLowerCase().contains(search.toLowerCase());
+                                // Also allow search by phone
+                                boolean phoneMatch = false;
+                                try {
+                                        User u = patient.getUser();
+                                        phoneMatch = u != null && u.getPhone() != null
+                                                        && u.getPhone().contains(search);
+                                } catch (Exception ignored) {
+                                }
+                                if (!nameMatch && !phoneMatch)
+                                        continue;
+                        }
+
+                        seenPatientIds.add(patient.getId());
+
+                        Map<String, Object> pMap = new HashMap<>();
+                        pMap.put("id", patient.getId());
+                        pMap.put("name", patient.getName());
+                        pMap.put("gender", patient.getGender() != null ? patient.getGender().name() : null);
+                        pMap.put("dateOfBirth", patient.getDateOfBirth()); // ← NEW
+                        pMap.put("bloodGroup", patient.getBloodGroup()); // ← NEW
+                        pMap.put("address", patient.getAddress()); // ← NEW
+                        pMap.put("medicalHistory", patient.getMedicalHistory()); // ← NEW
+                        pMap.put("profileImageUrl", patient.getProfileImage());
+
+                        try {
+                                User user = patient.getUser();
+                                if (user != null) {
+                                        pMap.put("email", user.getEmail());
+                                        pMap.put("phone", user.getPhone());
+                                }
+                        } catch (Exception e) {
+                                // Ignore if user lazy-load fails
+                        }
+
+                        pMap.put("lastVisit", appt.getScheduledDate());
+                        pMap.put("status", "active");
+
+                        long apptCount = appointments.stream()
+                                        .filter(a -> a.getPatient() != null
+                                                        && a.getPatient().getId().equals(patient.getId()))
+                                        .count();
+                        pMap.put("appointments", apptCount);
+
+                        patientList.add(pMap);
+                }
+
+                int start = (int) pageable.getOffset();
+                int end = Math.min((start + pageable.getPageSize()), patientList.size());
+                List<Map<String, Object>> pagedList = start <= end ? patientList.subList(start, end)
+                                : new ArrayList<>();
+
+                return new PageImpl<>(pagedList, pageable, patientList.size());
+        }
+
+
+        @Transactional(readOnly = true)
+        public List<Map<String, Object>> getPatientAppointmentsForDoctor(UUID doctorUserId, UUID patientId) {
+                Doctor doctor = doctorRepository.findByUserId(doctorUserId)
+                                .orElseThrow(() -> new ResourceNotFoundException("Doctor profile not found"));
+
+                Patient patient = patientRepository.findById(patientId)
+                                .orElseThrow(() -> new ResourceNotFoundException("Patient not found"));
+
+                // Only show CONFIRMED or COMPLETED appointments (valid for prescriptions)
+                List<Appointment> appointments = appointmentRepository
+                                .findByDoctorUserIdOrderByScheduledDateDescScheduledTimeDesc(
+                                                doctorUserId, Pageable.unpaged())
+                                .getContent()
+                                .stream()
+                                .filter(a -> a.getPatient() != null
+                                                && a.getPatient().getId().equals(patient.getId())
+                                                && (a.getStatus() == AppointmentStatus.CONFIRMED
+                                                                || a.getStatus() == AppointmentStatus.COMPLETED))
+                                .collect(Collectors.toList());
+
+                return appointments.stream().map(appt -> {
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("id", appt.getId());
+                        map.put("scheduledDate", appt.getScheduledDate());
+                        map.put("scheduledTime", appt.getScheduledTime());
+                        map.put("endTime", appt.getEndTime());
+                        map.put("status", appt.getStatus().name());
+                        map.put("type", appt.getType() != null ? appt.getType().name() : null);
+                        map.put("symptoms", appt.getSymptoms());
+                        map.put("diagnosis", appt.getDiagnosis());
+                        map.put("doctorNotes", appt.getDoctorNotes());
+                        // Let the frontend know if a prescription already exists
+                        map.put("prescription", appt.getPrescription() != null ? true : null);
+                        return map;
+                }).collect(Collectors.toList());
+        }
+
+
+
+        
+        @Transactional(readOnly = true)
+        public Page<Map<String, Object>> getDoctorPrescriptions(UUID doctorUserId, String search, Pageable pageable) {
+                Doctor doctor = doctorRepository.findByUserId(doctorUserId)
+                                .orElseThrow(() -> new ResourceNotFoundException("Doctor profile not found"));
+
+                // Fetch all prescriptions tied to this doctor
+                List<Prescription> prescriptions = prescriptionRepository
+                                .findByDoctorId(doctor.getId(), Pageable.unpaged()).getContent();
+                List<Map<String, Object>> list = new ArrayList<>();
+
+                for (Prescription p : prescriptions) {
+                        Patient patient = p.getPatient();
+
+                        // Apply Search filter by patient name
+                        if (search != null && !search.trim().isEmpty()) {
+                                if (patient.getName() == null
+                                                || !patient.getName().toLowerCase().contains(search.toLowerCase())) {
+                                        continue;
+                                }
+                        }
+
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("id", p.getId());
+                        map.put("patient", patient.getName());
+                        map.put("patientId", patient.getId());
+                        map.put("profileImageUrl", patient.getProfileImage());
+                        map.put("diagnosis", p.getAppointment() != null ? p.getAppointment().getDiagnosis() : "N/A");
+                        map.put("createdAt", p.getCreatedAt());
+                        map.put("status", "active"); // You can add logic here to mark as "expired" based on date
+                        map.put("notes", p.getNotes());
+
+                        // Safely parse the JSON medicines array
+                        try {
+                                if (p.getMedicines() != null && !p.getMedicines().isBlank()) {
+                                        List<Map<String, Object>> meds = objectMapper.readValue(p.getMedicines(),
+                                                        new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {
+                                                        });
+                                        map.put("medicines", meds);
+                                } else {
+                                        map.put("medicines", new ArrayList<>());
+                                }
+                        } catch (Exception e) {
+                                map.put("medicines", new ArrayList<>());
+                        }
+
+                        list.add(map);
+                }
+
+                // Apply manual pagination to the filtered list
+                int start = (int) pageable.getOffset();
+                int end = Math.min((start + pageable.getPageSize()), list.size());
+                List<Map<String, Object>> pagedList = start <= end ? list.subList(start, end) : new ArrayList<>();
+
+                return new PageImpl<>(pagedList, pageable, list.size());
+        }
+
         @Transactional
         public AppointmentResponse approveAppointment(UUID doctorUserId, UUID appointmentId) {
                 Appointment appointment = getAndValidateAppointment(doctorUserId, appointmentId);
@@ -106,6 +285,14 @@ public class DoctorService {
                 }
                 appointment.setStatus(AppointmentStatus.CONFIRMED);
                 appointmentRepository.save(appointment);
+                notificationDispatchService.notifyUser(
+                                appointment.getPatient().getUser(),
+                                "APPOINTMENT_UPDATE",
+                                "Appointment Approved",
+                                "Your appointment with Dr. " + appointment.getDoctor().getName() + " has been approved.",
+                                appointment.getId().toString(),
+                                true,
+                                true);
                 return toAppointmentResponse(appointment);
         }
 
@@ -119,6 +306,63 @@ public class DoctorService {
                 appointment.setCancellationReason(reason);
                 appointmentRepository.save(appointment);
                 eventPublisher.publishEvent(new AppointmentCancelledEvent(this, appointment, "DOCTOR"));
+                return toAppointmentResponse(appointment);
+        }
+
+        @Transactional
+        public AppointmentResponse rescheduleAppointment(UUID doctorUserId, UUID appointmentId,
+                        AppointmentRescheduleRequest request) {
+                Appointment appointment = getAndValidateAppointment(doctorUserId, appointmentId);
+
+                if (appointment.getStatus() == AppointmentStatus.CANCELLED
+                                || appointment.getStatus() == AppointmentStatus.REJECTED
+                                || appointment.getStatus() == AppointmentStatus.COMPLETED) {
+                        throw new IllegalArgumentException("Cannot reschedule this appointment");
+                }
+
+                if (request.getScheduledDate().isBefore(LocalDate.now())) {
+                        throw new IllegalArgumentException("Cannot reschedule to a past date");
+                }
+
+                DoctorSettings settings = doctorSettingsRepository.findByUserId(doctorUserId).orElse(null);
+                int slotDuration = settings != null ? settings.getSlotDurationMinutes() : 30;
+                java.time.LocalTime newEndTime = request.getScheduledTime().plusMinutes(slotDuration);
+
+                List<Appointment> conflicts = appointmentRepository.findConflicting(
+                                appointment.getDoctor().getId(),
+                                request.getScheduledDate(),
+                                request.getScheduledTime(),
+                                newEndTime).stream()
+                                .filter(a -> !a.getId().equals(appointment.getId()))
+                                .toList();
+
+                if (!conflicts.isEmpty()) {
+                        throw new IllegalArgumentException("Requested reschedule slot is already booked");
+                }
+
+                appointment.setScheduledDate(request.getScheduledDate());
+                appointment.setScheduledTime(request.getScheduledTime());
+                appointment.setEndTime(newEndTime);
+                appointment.setStatus(AppointmentStatus.CONFIRMED);
+
+                if (request.getReason() != null && !request.getReason().isBlank()) {
+                        String existing = appointment.getDoctorNotes() == null ? "" : appointment.getDoctorNotes() + "\n";
+                        appointment.setDoctorNotes(existing + "Rescheduled reason: " + request.getReason());
+                }
+
+                appointmentRepository.save(appointment);
+
+                notificationDispatchService.notifyUser(
+                                appointment.getPatient().getUser(),
+                                "APPOINTMENT_UPDATE",
+                                "Appointment Rescheduled",
+                                "Your appointment with Dr. " + appointment.getDoctor().getName()
+                                                + " was rescheduled to " + appointment.getScheduledDate()
+                                                + " " + appointment.getScheduledTime(),
+                                appointment.getId().toString(),
+                                true,
+                                true);
+
                 return toAppointmentResponse(appointment);
         }
 
@@ -194,6 +438,15 @@ public class DoctorService {
                         throw new IllegalArgumentException("Invalid prescription data");
                 }
                 appointmentRepository.save(appointment);
+                notificationDispatchService.notifyUser(
+                                appointment.getPatient().getUser(),
+                                "PRESCRIPTION_UPDATE",
+                                "New Prescription Added",
+                                "Dr. " + appointment.getDoctor().getName()
+                                                + " has shared a new prescription for your appointment.",
+                                appointment.getId().toString(),
+                                true,
+                                true);
                 return toAppointmentResponse(appointment);
         }
 

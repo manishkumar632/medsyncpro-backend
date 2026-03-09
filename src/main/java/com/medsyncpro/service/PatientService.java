@@ -37,6 +37,7 @@ public class PatientService {
     private final DoctorSettingsRepository doctorSettingsRepository;
     private final AppointmentRepository appointmentRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final PrescriptionRepository prescriptionRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -50,7 +51,7 @@ public class PatientService {
         Patient patient = patientRepository.findByUserId(patientUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Patient profile not found"));
 
-        Doctor doctor = doctorRepository.findById(request.getDoctorId())
+        Doctor doctor = doctorRepository.findByUserId(request.getDoctorId())
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor not found"));
 
         DoctorSettings settings = doctorSettingsRepository.findByUserId(doctor.getUser().getId())
@@ -161,7 +162,7 @@ public class PatientService {
 
     @Transactional(readOnly = true)
     public List<SlotResponse> getAvailableSlots(UUID doctorId, String type) {
-        Doctor doctor = doctorRepository.findById(doctorId)
+        Doctor doctor = doctorRepository.findByUserId(doctorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor not found"));
 
         DoctorSettings settings = doctorSettingsRepository.findByUserId(doctor.getUser().getId())
@@ -334,5 +335,62 @@ public class PatientService {
                 .cancellationReason(appt.getCancellationReason())
                 .prescription(appt.getPrescription())
                 .build();
+    }
+
+
+    @Transactional(readOnly = true)
+    public Page<Map<String, Object>> getPatientPrescriptions(UUID patientUserId, Pageable pageable) {
+
+        Patient patient = patientRepository.findByUserId(patientUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient profile not found"));
+
+        Page<Prescription> page = prescriptionRepository.findByPatientId(patient.getId(), pageable);
+
+        List<Map<String, Object>> result = page.getContent().stream().map(rx -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", rx.getId());
+            map.put("notes", rx.getNotes());
+            map.put("createdAt", rx.getCreatedAt());
+
+            // ── Doctor info ──────────────────────────────────────────────
+            Doctor doctor = rx.getDoctor();
+            if (doctor != null) {
+                map.put("doctorName", doctor.getName());
+                map.put("doctorImage", doctor.getProfileImage());
+                map.put("doctorSpecialty",
+                        doctor.getSpecialization() != null
+                                ? doctor.getSpecialization().getName()
+                                : null);
+            }
+
+            // ── Appointment info ─────────────────────────────────────────
+            Appointment appt = rx.getAppointment();
+            if (appt != null) {
+                map.put("appointmentId", appt.getId());
+                map.put("scheduledDate", appt.getScheduledDate());
+                map.put("diagnosis", appt.getDiagnosis());
+                map.put("symptoms", appt.getSymptoms());
+            }
+
+            // ── Medicines JSON → List ────────────────────────────────────
+            try {
+                String raw = rx.getMedicines();
+                if (raw != null && !raw.isBlank()) {
+                    List<Map<String, Object>> meds = objectMapper.readValue(
+                            raw, new TypeReference<List<Map<String, Object>>>() {
+                            });
+                    map.put("medicines", meds);
+                } else {
+                    map.put("medicines", List.of());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse medicines for prescription {}: {}", rx.getId(), e.getMessage());
+                map.put("medicines", List.of());
+            }
+
+            return map;
+        }).collect(Collectors.toList());
+
+        return new PageImpl<>(result, pageable, page.getTotalElements());
     }
 }

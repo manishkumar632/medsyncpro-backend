@@ -119,7 +119,7 @@ public class AuthService {
                 .from("refresh_token", token)
                 .httpOnly(true)
                 .secure(true)
-                .path("/api/auth")
+                .path("/")
                 .maxAge(refreshExpiration / 1000)
                 .sameSite("None")
                 .build();

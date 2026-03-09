@@ -31,6 +31,9 @@ public class DoctorSearchController {
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<Page<DoctorSearchResult>>> searchDoctors(
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) String specialization,
+            @RequestParam(required = false) String location,
+            @RequestParam(defaultValue = "false") boolean availableOnly,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "name") String sort,
@@ -43,7 +46,8 @@ public class DoctorSearchController {
                 : Sort.Direction.ASC;
 
         Pageable pageable = PageRequest.of(page, safeSize, Sort.by(sortDir, sort));
-        Page<DoctorSearchResult> results = doctorSearchService.searchDoctors(q, pageable);
+        Page<DoctorSearchResult> results = doctorSearchService.searchDoctors(
+                q, specialization, location, availableOnly, pageable);
 
         String message = results.isEmpty()
                 ? "No doctors found matching your search"
